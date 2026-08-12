@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CipherCheck — Password Strength Analyzer &amp; Security Awareness Tool</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --ink: #0b1220;
+    --panel: #121a2b;
+    --panel-2: #1a2438;
+    --line: #26314a;
+    --text: #e8ecf6;
+    --text-muted: #8a93ac;
+    --strong: #2fd9a8;
+    --fair: #f0b33c;
+    --weak: #ef5b5b;
+    --radius: 12px;
+    --font-display: "Space Grotesk", sans-serif;
+    --font-body: "Inter", sans-serif;
+    --font-mono: "JetBrains Mono", monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: radial-gradient(ellipse 1200px 600px at 50% -10%, #16213a 0%, var(--ink) 55%);
+    color: var(--text);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a { color: var(--strong); }
+
+  .page {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 32px 20px 80px;
+  }
+
+  /* ---------------- Topbar ---------------- */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-bottom: 40px;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1.15rem;
+    letter-spacing: 0.02em;
+  }
+
+  .brand-mark {
+    width: 30px;
+    height: 30px;
+    display: grid;
+    place-items: center;
+    border-radius: 8px;
+    background: linear-gradient(145deg, var(--strong), #1c9a78);
+    color: #062017;
+    font-size: 15px;
+  }
+
+  .brand-accent { color: var(--strong); }
+
+  .flow-strip {
+    display: flex;
+    gap: 4px;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+  }
+
+  .flow-step {
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    transition: border-color 0.3s ease, color 0.3s ease;
+  }
+
+  .flow-step.active {
+    color: var(--strong);
+    border-color: var(--strong);
+  }
+
+  /* ---------------- Hero / Console ---------------- */
+  .hero { margin-bottom: 44px; }
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--strong);
+    margin: 0 0 10px;
+  }
+
+  h1 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: clamp(1.6rem, 4vw, 2.4rem);
+    line-height: 1.15;
+    margin: 0 0 10px;
+    letter-spacing: -0.01em;
+  }
+
+  .hero-sub {
+    color: var(--text-muted);
+    margin: 0 0 26px;
+    font-size: 0.95rem;
+  }
+
+  .console {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 22px;
+  }
+
+  .input-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 4px 4px 4px 16px;
+    transition: border-color 0.25s ease, box-shadow 0.25s ease;
+  }
+
+  .input-row.flag-common {
+    animation: flagPulse 0.6s ease;
+    border-color: var(--weak);
+  }
+
+  @keyframes flagPulse {
+    0% { box-shadow: 0 0 0 0 rgba(239, 91, 91, 0.5); }
+    100% { box-shadow: 0 0 0 10px rgba(239, 91, 91, 0); }
+  }
+
+  .pw-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 1.05rem;
+    letter-spacing: 0.02em;
+    padding: 14px 0;
+    min-width: 0;
+  }
+
+  .pw-input::placeholder { color: #57617a; }
+
+  .icon-btn {
+    width: 40px;
+    height: 40px;
+    display: grid;
+    place-items: center;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 8px;
+    font-size: 1rem;
+    flex-shrink: 0;
+  }
+
+  .icon-btn:hover { color: var(--text); background: rgba(255, 255, 255, 0.05); }
+  .icon-btn:focus-visible, .pw-input:focus-visible { outline: 2px solid var(--strong); outline-offset: 2px; }
+
+  .meter {
+    display: grid;
+    grid-template-columns: repeat(20, 1fr);
+    gap: 4px;
+    margin: 18px 0 14px;
+  }
+
+  .meter-seg {
+    height: 8px;
+    border-radius: 3px;
+    background: var(--line);
+    transition: background-color 0.35s ease, transform 0.2s ease;
+  }
+
+  .meter-seg.on { transform: scaleY(1.15); }
+
+  .meter-readout {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 0.88rem;
+    color: var(--text-muted);
+  }
+
+  .score-label {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1.05rem;
+    color: var(--text);
+  }
+
+  .readout-divider { opacity: 0.4; }
+
+  .crack-time-hero {
+    margin: 14px 0 0;
+    font-size: 0.88rem;
+    color: var(--text-muted);
+  }
+
+  .crack-time-hero strong { color: var(--text); font-family: var(--font-mono); }
+
+  /* ---------------- Panels ---------------- */
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 22px;
+  }
+
+  .panel-title {
+    font-family: var(--font-display);
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0 0 14px;
+  }
+
+  .grid-two {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin: 20px 0;
+  }
+
+  @media (max-width: 700px) {
+    .grid-two { grid-template-columns: 1fr; }
+  }
+
+  .checklist, .rec-list, .awareness-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .checklist li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.88rem;
+    color: var(--text-muted);
+    transition: color 0.25s ease;
+  }
+
+  .checklist li.pass { color: var(--text); }
+
+  .check-mark {
+    width: 18px;
+    height: 18px;
+    border-radius: 5px;
+    display: grid;
+    place-items: center;
+    font-size: 0.7rem;
+    flex-shrink: 0;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    color: var(--text-muted);
+    transition: all 0.25s ease;
+  }
+
+  .checklist li.pass .check-mark {
+    background: rgba(47, 217, 168, 0.15);
+    border-color: var(--strong);
+    color: var(--strong);
+  }
+
+  .rec-list li {
+    font-size: 0.88rem;
+    color: var(--text);
+    padding-left: 16px;
+    position: relative;
+    line-height: 1.5;
+  }
+
+  .rec-list li::before {
+    content: "›";
+    position: absolute;
+    left: 0;
+    color: var(--strong);
+    font-family: var(--font-display);
+  }
+
+  .rec-empty { color: var(--text-muted); font-style: italic; }
+
+  .crack-table-panel { margin-bottom: 20px; }
+
+  .crack-table {
+    display: grid;
+    gap: 8px;
+  }
+
+  .crack-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 0.85rem;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .crack-row:last-child { border-bottom: none; }
+
+  .crack-row .scenario { color: var(--text-muted); }
+  .crack-row .time { font-family: var(--font-mono); color: var(--text); text-align: right; }
+
+  /* ---------------- Export ---------------- */
+  .export-panel {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    flex-wrap: wrap;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 22px;
+    margin-bottom: 20px;
+  }
+
+  .muted { color: var(--text-muted); font-size: 0.85rem; margin: 4px 0 0; max-width: 420px; }
+
+  .primary-btn {
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 0.92rem;
+    color: #062017;
+    background: linear-gradient(145deg, var(--strong), #23c093);
+    border: none;
+    border-radius: 9px;
+    padding: 13px 22px;
+    cursor: pointer;
+    transition: transform 0.15s ease, opacity 0.2s ease;
+    white-space: nowrap;
+  }
+
+  .primary-btn:disabled {
+    background: var(--panel-2);
+    color: var(--text-muted);
+    cursor: not-allowed;
+  }
+
+  .primary-btn:not(:disabled):hover { transform: translateY(-1px); }
+  .primary-btn:focus-visible { outline: 2px solid var(--strong); outline-offset: 3px; }
+
+  .hibp-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+  }
+
+  .secondary-btn {
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 0.88rem;
+    color: var(--text);
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    padding: 11px 18px;
+    cursor: pointer;
+    transition: border-color 0.2s ease, transform 0.15s ease;
+    white-space: nowrap;
+  }
+
+  .secondary-btn:disabled { color: var(--text-muted); cursor: not-allowed; }
+  .secondary-btn:not(:disabled):hover { border-color: var(--strong); transform: translateY(-1px); }
+  .secondary-btn:focus-visible { outline: 2px solid var(--strong); outline-offset: 3px; }
+
+  .hibp-result {
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+
+  .hibp-result.breached { color: var(--weak); }
+  .hibp-result.clean { color: var(--strong); }
+
+  /* ---------------- Awareness ---------------- */
+  .awareness-panel { margin-bottom: 28px; }
+
+  .awareness-list li {
+    display: flex;
+    gap: 10px;
+    font-size: 0.88rem;
+    color: var(--text-muted);
+    line-height: 1.55;
+  }
+
+  .tip-mark { color: var(--fair); flex-shrink: 0; font-family: var(--font-display); }
+
+  .footer {
+    text-align: center;
+    color: #4d566e;
+    font-size: 0.78rem;
+    font-family: var(--font-mono);
+  }
+
+  /* ---------------- Reduced motion ---------------- */
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">&#9737;</span>
+      <span>CIPHER<span class="brand-accent">CHECK</span></span>
+    </div>
+    <div class="flow-strip">
+      <span class="flow-step active" id="flow1">01 &middot; Analyze</span>
+      <span class="flow-step" id="flow2">02 &middot; Review</span>
+      <span class="flow-step" id="flow3">03 &middot; Export</span>
+    </div>
+  </header>
+
+  <section class="hero">
+    <p class="eyebrow">Password security console</p>
+    <h1>Type a password. Watch it get read.</h1>
+    <p class="hero-sub">Everything below runs on this device. Nothing is saved or sent anywhere until you choose to export a report.</p>
+
+    <div class="console">
+      <div class="input-row" id="inputRow">
+        <input
+          type="text"
+          id="pwInput"
+          class="pw-input"
+          autocomplete="off"
+          autocapitalize="off"
+          spellcheck="false"
+          aria-label="Password to analyze"
+          placeholder="start typing..."
+        />
+        <button class="icon-btn" id="toggleVisibility" type="button" aria-label="Show password characters">&#128065;</button>
+      </div>
+
+      <div class="meter" id="meter" role="img" aria-label="Password strength meter"></div>
+
+      <div class="meter-readout" aria-live="polite">
+        <span class="score-label" id="scoreLabel">Enter a password</span>
+        <span class="readout-divider">&middot;</span>
+        <span id="scoreNum">0/100</span>
+        <span class="readout-divider">&middot;</span>
+        <span id="entropyNum">0.0 bits entropy</span>
+      </div>
+
+      <p class="crack-time-hero">Time to crack (GPU attack, offline): <strong id="crackHero">&mdash;</strong></p>
+    </div>
+  </section>
+
+  <section class="grid-two">
+    <div class="panel">
+      <h2 class="panel-title">Complexity checklist</h2>
+      <ul class="checklist" id="checklist"></ul>
+    </div>
+    <div class="panel">
+      <h2 class="panel-title">Recommendations</h2>
+      <ul class="rec-list" id="recommendations">
+        <li class="rec-empty">Start typing to see recommendations.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="panel crack-table-panel">
+    <h2 class="panel-title">Estimated time to crack, by attack scenario</h2>
+    <div class="crack-table" id="crackTable">
+      <div class="crack-row"><span class="scenario">Enter a password to estimate</span><span class="time">&mdash;</span></div>
+    </div>
+  </section>
+
+  <section class="panel hibp-panel">
+    <h2 class="panel-title">Check against real breach data</h2>
+    <p class="muted">Queries Have I Been Pwned's live database of 800M+ breached passwords &mdash; far more than the local list above. Only the first 5 characters of a SHA-1 hash are sent, computed in your browser; the password itself never leaves this device.</p>
+    <div class="hibp-row">
+      <button class="secondary-btn" id="hibpBtn" disabled>Check Have I Been Pwned</button>
+      <span id="hibpResult" class="hibp-result"></span>
+    </div>
+  </section>
+
+  <section class="export-panel">
+    <div>
+      <h2 class="panel-title">Export a report</h2>
+      <p class="muted">Generates a PDF with your score, checklist, and recommendations. Your password is masked in the report and is never stored on the server.</p>
+    </div>
+    <button class="primary-btn" id="reportBtn" disabled>Generate PDF report</button>
+  </section>
+
+  <section class="panel awareness-panel">
+    <h2 class="panel-title">General security awareness</h2>
+    <ul class="awareness-list" id="awarenessList"></ul>
+  </section>
+
+  <footer class="footer">
+    <p>Password Strength Analyzer &amp; Security Awareness Tool &mdash; analysis runs locally, nothing is logged.</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---- Fallback general awareness tips (used if /api/tips isn't reachable,
+  // e.g. when this file is opened directly instead of via the Flask app) ----
+  const FALLBACK_TIPS = [
+    "Use a unique password for every account \u2014 one breach shouldn't compromise the rest.",
+    "Use a password manager to generate and store strong, unique passwords.",
+    "Turn on multi-factor authentication (MFA) wherever it's offered.",
+    "Prefer a long passphrase over a short complex string \u2014 it's easier to remember and harder to crack.",
+    "Never reuse your email account's password anywhere else.",
+    "Be wary of phishing: a legitimate site will never email you asking you to 'confirm' your password.",
+    "Check haveibeenpwned.com periodically to see if your accounts appear in a known breach.",
+    "Change a password immediately if a service you use discloses a breach.",
+  ];
+
+  // ---- Compact common-password list for instant client-side checks.
+  // The Flask backend checks the full 10,000-word list when it builds the
+  // authoritative PDF report; this shorter list keeps the live meter snappy. ----
+  const COMMON_PASSWORDS = new Set(["123456", "password", "12345678", "qwerty", "123456789", "12345", "1234", "111111", "1234567", "dragon", "123123", "baseball", "abc123", "football", "monkey", "letmein", "696969", "shadow", "master", "666666", "qwertyuiop", "123321", "mustang", "1234567890", "michael", "654321", "pussy", "superman", "1qaz2wsx", "7777777", "fuckyou", "121212", "000000", "qazwsx", "123qwe", "killer", "trustno1", "jordan", "jennifer", "zxcvbnm", "asdfgh", "hunter", "buster", "soccer", "harley", "batman", "andrew", "tigger", "sunshine", "iloveyou", "fuckme", "2000", "charlie", "robert", "thomas", "hockey", "ranger", "daniel", "starwars", "klaster", "112233", "george", "asshole", "computer", "michelle", "jessica", "pepper", "1111", "zxcvbn", "555555", "11111111", "131313", "freedom", "777777", "pass", "fuck", "maggie", "159753", "aaaaaa", "ginger", "princess", "joshua", "cheese", "amanda", "summer", "love", "ashley", "6969", "nicole", "chelsea", "biteme", "matthew", "access", "yankees", "987654321", "dallas", "austin", "thunder", "taylor", "matrix", "william", "corvette", "hello", "martin", "heather", "secret", "fucker", "merlin", "diamond", "1234qwer", "gfhjkm", "hammer", "silver", "222222", "88888888", "anthony", "justin", "test", "bailey", "q1w2e3r4t5", "patrick", "internet", "scooter", "orange", "11111", "golfer", "cookie", "richard", "samantha", "bigdog", "guitar", "jackson", "whatever", "mickey", "chicken", "sparky", "snoopy", "maverick", "phoenix", "camaro", "sexy", "peanut", "morgan", "welcome", "falcon", "cowboy", "ferrari", "samsung", "andrea", "smokey", "steelers", "joseph", "mercedes", "dakota", "arsenal", "eagles", "melissa", "boomer", "booboo", "spider", "nascar", "monster", "tigers", "yellow", "xxxxxx", "123123123", "gateway", "marina", "diablo", "bulldog", "qwer1234", "compaq", "purple", "hardcore", "banana", "junior", "hannah", "123654", "porsche", "lakers", "iceman", "money", "cowboys", "987654", "london", "tennis", "999999", "ncc1701", "coffee", "scooby", "0000", "miller", "boston", "q1w2e3r4", "fuckoff", "brandon", "yamaha", "chester", "mother", "forever", "johnny", "edward", "333333", "oliver", "redsox", "player", "nikita", "knight", "fender", "barney", "midnight", "please", "brandy", "chicago", "badboy", "iwantu", "slayer", "rangers", "charles", "angel", "flower", "bigdaddy", "rabbit", "wizard", "bigdick", "jasper", "enter", "rachel", "chris", "steven", "winner", "adidas", "victoria", "natasha", "1q2w3e4r", "jasmine", "winter", "prince", "panties", "marine", "ghbdtn", "fishing", "cocacola", "casper", "james", "232323", "raiders", "888888", "marlboro", "gandalf", "asdfasdf", "crystal", "87654321", "12344321", "sexsex", "golden", "blowme", "bigtits", "8675309", "panther", "lauren", "angela", "bitch", "spanky", "thx1138", "angels", "madison", "winston", "shannon", "mike", "toyota", "blowjob", "jordan23", "canada", "sophie", "Password", "apples", "dick", "tiger", "razz", "123abc", "pokemon", "qazxsw", "55555", "qwaszx", "muffin", "johnson", "murphy", "cooper", "jonathan", "liverpoo", "david", "danielle", "159357", "jackie", "1990", "123456a", "789456", "turtle"].map(w => w.toLowerCase()));
+
+  const KEYBOARD_ROWS = ["qwertyuiop", "asdfghjkl", "zxcvbnm", "1234567890", "`1234567890-="];
+  const LEET_MAP = { "0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "@": "a", "$": "s", "!": "i", "+": "t" };
+
+  function leetNormalize(s) { return s.split("").map(c => LEET_MAP[c] || c).join(""); }
+
+  function characterPools(pw) {
+    return {
+      lowercase: /[a-z]/.test(pw),
+      uppercase: /[A-Z]/.test(pw),
+      digits: /[0-9]/.test(pw),
+      symbols: /[^a-zA-Z0-9]/.test(pw),
+    };
+  }
+
+  function poolSize(pools) {
+    let size = 0;
+    if (pools.lowercase) size += 26;
+    if (pools.uppercase) size += 26;
+    if (pools.digits) size += 10;
+    if (pools.symbols) size += 32;
+    return size || 1;
+  }
+
+  function calculateEntropy(pw, pools) {
+    if (!pw) return 0;
+    return Math.round(pw.length * Math.log2(poolSize(pools)) * 10) / 10;
+  }
+
+  function hasSequentialChars(pw, runLength) {
+    runLength = runLength || 4;
+    const lower = pw.toLowerCase();
+    for (let i = 0; i <= lower.length - runLength; i++) {
+      const chunk = lower.slice(i, i + runLength);
+      let asc = true, desc = true;
+      for (let j = 0; j < chunk.length - 1; j++) {
+        if (chunk.charCodeAt(j) + 1 !== chunk.charCodeAt(j + 1)) asc = false;
+        if (chunk.charCodeAt(j) - 1 !== chunk.charCodeAt(j + 1)) desc = false;
+      }
+      if (asc || desc) return true;
+    }
+    return false;
+  }
+
+  function hasRepeatedChars(pw, runLength) {
+    runLength = runLength || 3;
+    for (let i = 0; i <= pw.length - runLength; i++) {
+      if (new Set(pw.slice(i, i + runLength)).size === 1) return true;
+    }
+    return false;
+  }
+
+  function hasKeyboardWalk(pw, runLength) {
+    runLength = runLength || 4;
+    const lower = pw.toLowerCase();
+    for (const row of KEYBOARD_ROWS) {
+      for (let i = 0; i <= row.length - runLength; i++) {
+        const chunk = row.slice(i, i + runLength);
+        if (lower.includes(chunk) || lower.includes(chunk.split("").reverse().join(""))) return true;
+      }
+    }
+    return false;
+  }
+
+  function hasYearPattern(pw) { return /(19|20)\d{2}/.test(pw); }
+
+  function matchesCommonPassword(pw) {
+    const lower = pw.toLowerCase();
+    if (COMMON_PASSWORDS.has(lower)) return true;
+    if (COMMON_PASSWORDS.has(leetNormalize(lower))) return true;
+    const stripped = lower.replace(/\d+$/, "");
+    return COMMON_PASSWORDS.has(stripped) && stripped.length >= 4;
+  }
+
+  function humanizeSeconds(seconds) {
+    if (seconds < 1) return "instantly";
+    const units = [
+      ["century", 60 * 60 * 24 * 365 * 100],
+      ["year", 60 * 60 * 24 * 365],
+      ["day", 60 * 60 * 24],
+      ["hour", 60 * 60],
+      ["minute", 60],
+      ["second", 1],
+    ];
+    const plurals = { century: "centuries" };
+    for (const [name, unitSeconds] of units) {
+      if (seconds >= unitSeconds) {
+        const value = seconds / unitSeconds;
+        const unitLabel = plurals[name] || (name + "s");
+        if (value > 1000000) return value.toExponential(0) + " " + unitLabel;
+        return value.toLocaleString(undefined, { maximumFractionDigits: 1 }) + " " + unitLabel;
+      }
+    }
+    return "instantly";
+  }
+
+  function estimateCrackTimes(entropyBits) {
+    const guesses = Math.pow(2, entropyBits);
+    const scenarios = [
+      ["Online, throttled (100/hr)", 100 / 3600],
+      ["Online, unthrottled (10/sec)", 10],
+      ["Offline, slow hash (10k/sec)", 1e4],
+      ["Offline, fast hash / GPU (10B/sec)", 1e10],
+    ];
+    return scenarios.map(([label, rate]) => [label, humanizeSeconds(guesses / rate / 2)]);
+  }
+
+  function analyzePassword(pw) {
+    pw = pw || "";
+    const pools = characterPools(pw);
+    const varietyCount = Object.values(pools).filter(Boolean).length;
+    const entropy = calculateEntropy(pw, pools);
+    const isCommon = matchesCommonPassword(pw);
+    const seq = hasSequentialChars(pw);
+    const rep = hasRepeatedChars(pw);
+    const walk = hasKeyboardWalk(pw);
+    const year = hasYearPattern(pw);
+
+    const checks = [
+      ["length_ok", "At least 8 characters", pw.length >= 8],
+      ["length_strong", "At least 12 characters (recommended)", pw.length >= 12],
+      ["has_lowercase", "Contains lowercase letters", pools.lowercase],
+      ["has_uppercase", "Contains uppercase letters", pools.uppercase],
+      ["has_digits", "Contains numbers", pools.digits],
+      ["has_symbols", "Contains symbols", pools.symbols],
+      ["not_common", "Not a known common/breached password", !isCommon],
+      ["no_sequential", "No sequential characters (abcd, 4321)", !seq],
+      ["no_repeated", "No repeated-character runs (aaa, 111)", !rep],
+      ["no_walk", "No keyboard-walk patterns (qwerty, asdf)", !walk],
+    ];
+
+    let score = 0;
+    if (pw) {
+      score += Math.min(pw.length, 20) * 2.5;
+      score += varietyCount * 7.5;
+      score += pw.length >= 12 ? 20 : 0;
+      score = Math.min(score, 100);
+      if (isCommon) score = Math.min(score, 15);
+      if (seq || rep || walk) score = Math.max(0, score - 25);
+      if (year && pw.length <= 10) score = Math.max(0, score - 5);
+    }
+    score = Math.round(Math.max(0, Math.min(100, score)));
+
+    let label;
+    if (!pw) label = "Enter a password";
+    else if (score >= 85) label = "Very Strong";
+    else if (score >= 65) label = "Strong";
+    else if (score >= 45) label = "Fair";
+    else if (score >= 25) label = "Weak";
+    else label = "Very Weak";
+
+    const recommendations = [];
+    if (pw) {
+      if (pw.length < 12) recommendations.push("Use at least 12 characters \u2014 longer passwords are exponentially harder to brute-force.");
+      if (!pools.uppercase) recommendations.push("Add at least one uppercase letter.");
+      if (!pools.lowercase) recommendations.push("Add at least one lowercase letter.");
+      if (!pools.digits) recommendations.push("Add at least one number.");
+      if (!pools.symbols) recommendations.push("Add at least one symbol (e.g. ! @ # $ %).");
+      if (isCommon) recommendations.push("This password (or a close variant) appears on public breach/common-password lists \u2014 don't use it anywhere.");
+      if (seq) recommendations.push("Avoid sequential runs like 'abcd' or '4321'.");
+      if (rep) recommendations.push("Avoid repeated characters like 'aaa' or '111'.");
+      if (walk) recommendations.push("Avoid keyboard walks like 'qwerty' or 'asdf'.");
+      if (year) recommendations.push("Avoid embedding years or dates \u2014 they're commonly guessed.");
+      if (recommendations.length === 0) recommendations.push("Solid password. Consider a password manager so you never have to reuse or remember it.");
+    }
+
+    return { score, label, entropy, checks, isCommon, recommendations, crackTimes: pw ? estimateCrackTimes(entropy) : [] };
+  }
+
+  // ---------------- DOM wiring ----------------
+  const pwInput = document.getElementById("pwInput");
+  const inputRow = document.getElementById("inputRow");
+  const toggleBtn = document.getElementById("toggleVisibility");
+  const meterEl = document.getElementById("meter");
+  const scoreLabel = document.getElementById("scoreLabel");
+  const scoreNum = document.getElementById("scoreNum");
+  const entropyNum = document.getElementById("entropyNum");
+  const crackHero = document.getElementById("crackHero");
+  const checklistEl = document.getElementById("checklist");
+  const recListEl = document.getElementById("recommendations");
+  const crackTableEl = document.getElementById("crackTable");
+  const reportBtn = document.getElementById("reportBtn");
+  const hibpBtn = document.getElementById("hibpBtn");
+  const hibpResultEl = document.getElementById("hibpResult");
+  const awarenessListEl = document.getElementById("awarenessList");
+  const flow2 = document.getElementById("flow2");
+  const flow3 = document.getElementById("flow3");
+
+  const SEGMENTS = 20;
+  for (let i = 0; i < SEGMENTS; i++) {
+    const seg = document.createElement("div");
+    seg.className = "meter-seg";
+    meterEl.appendChild(seg);
+  }
+  const segEls = Array.from(meterEl.children);
+
+  function colorForScore(score) {
+    if (score >= 65) return "var(--strong)";
+    if (score >= 45) return "var(--fair)";
+    return "var(--weak)";
+  }
+
+  let lastCommonFlag = false;
+  let lastCheckedPassword = null;
+  let lastHibpResult = null;
+
+  function resetHibpUI() {
+    lastHibpResult = null;
+    hibpResultEl.textContent = "";
+    hibpResultEl.className = "hibp-result";
+  }
+
+  function render(pw) {
+    const r = analyzePassword(pw);
+    const filled = pw ? Math.round((r.score / 100) * SEGMENTS) : 0;
+    const color = colorForScore(r.score);
+
+    segEls.forEach((seg, i) => {
+      if (i < filled) {
+        seg.style.background = color;
+        seg.classList.add("on");
+      } else {
+        seg.style.background = "";
+        seg.classList.remove("on");
+      }
+    });
+
+    scoreLabel.textContent = r.label;
+    scoreNum.textContent = pw ? (r.score + "/100") : "0/100";
+    entropyNum.textContent = r.entropy.toFixed(1) + " bits entropy";
+
+    const gpuRow = r.crackTimes.find(row => row[0].indexOf("GPU") !== -1);
+    crackHero.textContent = gpuRow ? gpuRow[1] : "\u2014";
+
+    // Checklist
+    checklistEl.innerHTML = "";
+    r.checks.forEach(([key, text, passed]) => {
+      const li = document.createElement("li");
+      li.className = passed ? "pass" : "";
+      li.innerHTML = '<span class="check-mark">' + (passed ? "&#10003;" : "&#183;") + "</span><span>" + text + "</span>";
+      checklistEl.appendChild(li);
+    });
+
+    // Recommendations
+    recListEl.innerHTML = "";
+    if (!pw) {
+      const li = document.createElement("li");
+      li.className = "rec-empty";
+      li.textContent = "Start typing to see recommendations.";
+      recListEl.appendChild(li);
+    } else {
+      r.recommendations.forEach(rec => {
+        const li = document.createElement("li");
+        li.textContent = rec;
+        recListEl.appendChild(li);
+      });
+    }
+
+    // Crack time table
+    crackTableEl.innerHTML = "";
+    if (!pw) {
+      crackTableEl.innerHTML = '<div class="crack-row"><span class="scenario">Enter a password to estimate</span><span class="time">\u2014</span></div>';
+    } else {
+      r.crackTimes.forEach(([label, time]) => {
+        const row = document.createElement("div");
+        row.className = "crack-row";
+        row.innerHTML = '<span class="scenario">' + label + '</span><span class="time">' + time + "</span>";
+        crackTableEl.appendChild(row);
+      });
+    }
+
+    // Common-password flag pulse
+    if (r.isCommon && !lastCommonFlag) {
+      inputRow.classList.remove("flag-common");
+      void inputRow.offsetWidth; // restart animation
+      inputRow.classList.add("flag-common");
+    }
+    lastCommonFlag = r.isCommon;
+
+    // Live HIBP check state: any edit invalidates a previous result
+    if (pw !== lastCheckedPassword) {
+      resetHibpUI();
+    }
+    lastCheckedPassword = pw;
+    hibpBtn.disabled = !pw;
+
+    // Report button + flow strip state
+    reportBtn.disabled = !pw;
+    if (pw) {
+      flow2.classList.add("active");
+      flow3.classList.toggle("active", r.score >= 45);
+    } else {
+      flow2.classList.remove("active");
+      flow3.classList.remove("active");
+    }
+  }
+
+  pwInput.addEventListener("input", () => render(pwInput.value));
+  render("");
+
+  toggleBtn.addEventListener("click", () => {
+    const showing = pwInput.type === "text";
+    pwInput.type = showing ? "password" : "text";
+    toggleBtn.textContent = showing ? "\u{1F576}\u{FE0F}" : "\u{1F441}\u{FE0F}";
+    toggleBtn.setAttribute("aria-label", showing ? "Show password characters" : "Hide password characters");
+    pwInput.focus();
+  });
+
+  async function sha1Hex(text) {
+    const bytes = new TextEncoder().encode(text);
+    const digest = await crypto.subtle.digest("SHA-1", bytes);
+    return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, "0")).join("").toUpperCase();
+  }
+
+  hibpBtn.addEventListener("click", async () => {
+    const pw = pwInput.value;
+    if (!pw) return;
+
+    if (!window.crypto || !window.crypto.subtle) {
+      hibpResultEl.textContent = "Web Crypto isn't available in this browser/context (needs HTTPS or localhost).";
+      hibpResultEl.className = "hibp-result breached";
+      return;
+    }
+
+    hibpBtn.disabled = true;
+    const originalText = hibpBtn.textContent;
+    hibpBtn.textContent = "Checking\u2026";
+    hibpResultEl.textContent = "";
+    hibpResultEl.className = "hibp-result";
+
+    try {
+      const hash = await sha1Hex(pw);
+      const prefix = hash.slice(0, 5);
+      const suffix = hash.slice(5);
+
+      // Only the 5-character prefix is ever sent -- the password and its
+      // full hash never leave this browser. See README for the k-anonymity
+      // model this relies on.
+      const res = await fetch("https://api.pwnedpasswords.com/range/" + prefix);
+      if (!res.ok) throw new Error("HIBP request failed (" + res.status + ")");
+      const text = await res.text();
+
+      let count = 0;
+      let breached = false;
+      for (const line of text.split("\n")) {
+        const [lineSuffix, countStr] = line.trim().split(":");
+        if (lineSuffix === suffix) {
+          breached = true;
+          count = parseInt(countStr, 10) || 0;
+          break;
+        }
+      }
+
+      lastHibpResult = { checked: true, breached, count, error: null };
+
+      if (breached) {
+        hibpResultEl.textContent = "Found in " + count.toLocaleString() + " known breaches.";
+        hibpResultEl.className = "hibp-result breached";
+      } else {
+        hibpResultEl.textContent = "Not found in the Have I Been Pwned database.";
+        hibpResultEl.className = "hibp-result clean";
+      }
+
+      // Re-run the local scoring pass with this result folded in, so the
+      // meter/checklist/recommendations reflect a live-confirmed breach
+      // even if the smaller local wordlist missed it.
+      render(pw);
+      applyHibpToUI(lastHibpResult);
+    } catch (err) {
+      lastHibpResult = { checked: false, breached: false, count: 0, error: String(err) };
+      hibpResultEl.textContent = "Couldn't reach Have I Been Pwned \u2014 check your connection.";
+      hibpResultEl.className = "hibp-result breached";
+    } finally {
+      hibpBtn.disabled = !pwInput.value;
+      hibpBtn.textContent = originalText;
+    }
+  });
+
+  function applyHibpToUI(hibpResult) {
+    if (!hibpResult || !hibpResult.checked || !hibpResult.breached) return;
+    // Force the strength meter/checklist into a "breached" state, mirroring
+    // what analyzer.py does server-side when a live breach is confirmed.
+    segEls.forEach(seg => { seg.style.background = "var(--weak)"; seg.classList.add("on"); });
+    scoreLabel.textContent = "Very Weak";
+    scoreNum.textContent = "15/100";
+    const li = document.createElement("li");
+    li.textContent = "Found in " + hibpResult.count.toLocaleString() + " known breaches (Have I Been Pwned) \u2014 change it immediately anywhere it's used.";
+    recListEl.insertBefore(li, recListEl.firstChild);
+  }
+
+  reportBtn.addEventListener("click", async () => {
+    const pw = pwInput.value;
+    if (!pw) return;
+    reportBtn.disabled = true;
+    const originalText = reportBtn.textContent;
+    reportBtn.textContent = "Generating\u2026";
+    try {
+      const res = await fetch("/api/report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: pw, hibp_result: lastHibpResult }),
+      });
+      if (!res.ok) throw new Error("Report request failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "password_security_report.pdf";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert("Couldn't generate the report. Make sure the Flask app (app.py) is running \u2014 this feature needs the Python backend.");
+    } finally {
+      reportBtn.disabled = !pwInput.value;
+      reportBtn.textContent = originalText;
+    }
+  });
+
+  // Populate general awareness tips from the backend (single source of
+  // truth in analyzer.py); fall back to a static list if unreachable,
+  // e.g. when this file is opened directly rather than via Flask.
+  function renderTips(tips) {
+    awarenessListEl.innerHTML = "";
+    tips.forEach(tip => {
+      const li = document.createElement("li");
+      li.innerHTML = '<span class="tip-mark">&rsaquo;</span><span>' + tip + "</span>";
+      awarenessListEl.appendChild(li);
+    });
+  }
+
+  fetch("/api/tips")
+    .then(res => { if (!res.ok) throw new Error("no tips endpoint"); return res.json(); })
+    .then(data => renderTips(data.tips || FALLBACK_TIPS))
+    .catch(() => renderTips(FALLBACK_TIPS));
+})();
+</script>
+</body>
+</html>
