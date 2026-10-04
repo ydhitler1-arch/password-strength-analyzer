@@ -509,6 +509,7 @@
           aria-label="Password to analyze"
           placeholder="start typing..."
         />
+        <button class="icon-btn" id="copyBtn" type="button" aria-label="Copy password" title="Copy password">&#10064;</button>
         <button class="icon-btn" id="toggleVisibility" type="button" aria-label="Show password characters">&#128065;</button>
       </div>
 
@@ -1173,6 +1174,34 @@
   });
 
 
+
+  // ---- Copy to clipboard (with a fallback for non-secure contexts) ----
+  async function copyText(text, btn, idleLabel) {
+    let ok = false;
+    try {
+      await navigator.clipboard.writeText(text);
+      ok = true;
+    } catch (e) {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      try { ok = document.execCommand("copy"); } catch (e2) { ok = false; }
+      document.body.removeChild(ta);
+    }
+    if (btn) {
+      const prev = btn.textContent;
+      btn.textContent = ok ? "Copied ✓" : "Copy failed";
+      setTimeout(() => { btn.textContent = idleLabel !== undefined ? idleLabel : prev; }, 1500);
+    }
+  }
+
+  document.getElementById("copyBtn").addEventListener("click", () => {
+    if (pwInput.value) copyText(pwInput.value, document.getElementById("copyBtn"), "❐");
+  });
+
   // ---- Personalized suggestions ----
   const persBtn = document.getElementById("persBtn");
   const persStatus = document.getElementById("persStatus");
@@ -1229,7 +1258,14 @@
         render(sug.value);
         document.querySelector(".hero").scrollIntoView({ behavior: "smooth" });
       });
+      const copy = document.createElement("button");
+      copy.type = "button";
+      copy.className = "secondary-btn";
+      copy.style.cssText = "margin-top:12px;margin-left:8px";
+      copy.textContent = "Copy";
+      copy.addEventListener("click", () => copyText(sug.value, copy, "Copy"));
       card.appendChild(btn);
+      card.appendChild(copy);
       persResults.appendChild(card);
     });
     persNote.hidden = !data.note;

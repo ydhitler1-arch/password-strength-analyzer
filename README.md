@@ -15,7 +15,7 @@ the person using it *why* a password is weak, not just that it is.
 - **Common-password / breach detection** — checked locally against a real 10,000-entry breached-password list (SecLists), with basic leetspeak normalization (`p@ssw0rd` → `password`) and trailing-digit stripping (`password123` → `password`). Optionally, click **"Check Have I Been Pwned"** to query the live HIBP database of 800M+ breached passwords via k-anonymity — only the first 5 characters of a SHA-1 hash are sent (computed in-browser via Web Crypto), so the password itself never leaves the device. Also available via `cli.py --live`.
 - **Entropy & crack-time estimation** — bits of entropy plus estimated time to crack under four attack scenarios (throttled online, unthrottled online, offline slow hash, offline fast GPU hash).
 - **Tailored recommendations** — specific, actionable fixes generated from what's actually missing in the password entered.
-- **Password & passphrase generator** — cryptographically secure (`secrets` in Python, `crypto.getRandomValues` in the browser). Random passwords (length, character types, optional look-alike exclusion, at least one character per selected type) or diceware-style passphrases (3–12 words from a 2048-word list, 11 bits/word; optional separator, capitalization, trailing digit). The result is fed straight into the strength meter, and the *true* generator entropy is shown alongside it — for passphrases, that figure is more honest than the meter's per-character estimate. Browser generation never sends anything over the network. Also available via `cli.py --generate` / `--passphrase` and `POST /api/generate`.
+- **Password & passphrase generator** — cryptographically secure (`secrets` in Python, `crypto.getRandomValues` in the browser). Random passwords (length, character types, optional look-alike exclusion, at least one character per selected type) or diceware-style passphrases (3–12 words from a 2048-word list, 11 bits/word; optional separator, capitalization, trailing digit). The result is fed straight into the strength meter, and the *true* generator entropy is shown alongside it — for passphrases, that figure is more honest than the meter's per-character estimate. Browser generation never sends anything over the network. Every password field and suggestion card has a copy-to-clipboard button. Also available via `cli.py --generate` / `--passphrase` and `POST /api/generate`.
 - **Personalized suggestions** — enter a name, date of birth and favourite things and get 3+ differently-shaped passwords (anchor + random block, personal passphrase, initials + random tail), each already run through the analyzer. Pick one to load it into the meter for the full breakdown. If the password you typed is weak, the page prompts for those details and also offers an "upgrade" of your own password that keeps its recognisable core. Personal details are only memory anchors: strength is credited from the random parts alone (`random_entropy_bits`), so suggestions hold up even if someone knows your details. The tool also warns when your current password contains your name or birth date. API: `POST /api/personalize`.
 - **General security awareness tips** — always-visible, password-independent guidance (password managers, MFA, phishing, breach checking).
 - **PDF report generation** — one-click downloadable report with the score, checklist, crack-time table, and recommendations. The password itself is masked in the report and never written to disk or logged anywhere.
@@ -62,6 +62,15 @@ Generator examples:
 python cli.py --generate --length 20 --avoid-ambiguous
 python cli.py --passphrase --words 6 --capitalize --add-number --separator .
 ```
+
+## Tests
+
+```bash
+pip install -r requirements.txt -r requirements-dev.txt
+python -m pytest
+```
+
+Covers the generator (lengths, character classes, entropy, input validation), the personalized suggestions (analyzer acceptance, no raw date of birth embedded, upgrade flow, fallbacks) and the new API endpoints.
 
 ## How scoring works
 
