@@ -38,7 +38,7 @@
   a { color: var(--strong); }
 
   .page {
-    max-width: 880px;
+    max-width: 1120px;
     margin: 0 auto;
     padding: 32px 20px 80px;
   }
@@ -251,6 +251,19 @@
 
   @media (max-width: 700px) {
     .grid-two { grid-template-columns: 1fr; }
+  }
+
+
+  /* ---------------- Wider layout: side-by-side tool panels ---------------- */
+  .tools-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 0 0 20px; align-items: start; }
+  .tools-grid .panel { margin-top: 0; }
+  .tools-grid .muted, .grid-two .muted { max-width: none; }
+  .pers-form label:nth-child(3) { grid-column: 1 / -1; }
+  .grid-two .hibp-panel, .grid-two .export-panel { margin: 0; height: 100%; }
+  .grid-two .export-panel { flex-direction: column; align-items: flex-start; justify-content: space-between; }
+  .awareness-list { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 28px; }
+  @media (max-width: 900px) {
+    .tools-grid, .awareness-list { grid-template-columns: 1fr; }
   }
 
   .checklist, .rec-list, .awareness-list {
@@ -527,6 +540,7 @@
     </div>
   </section>
 
+  <div class="tools-grid">
   <section class="panel pers-panel" id="persPanel">
     <h2 class="panel-title">Personalized password suggestions</h2>
     <div class="pers-banner" id="persBanner" hidden>
@@ -585,6 +599,8 @@
     </div>
   </section>
 
+  </div>
+
   <section class="grid-two">
     <div class="panel">
       <h2 class="panel-title">Complexity checklist</h2>
@@ -605,6 +621,7 @@
     </div>
   </section>
 
+  <div class="grid-two">
   <section class="panel hibp-panel">
     <h2 class="panel-title">Check against real breach data</h2>
     <p class="muted">Queries Have I Been Pwned's live database of 800M+ breached passwords &mdash; far more than the local list above. Only the first 5 characters of a SHA-1 hash are sent, computed in your browser; the password itself never leaves this device.</p>
@@ -621,6 +638,8 @@
     </div>
     <button class="primary-btn" id="reportBtn" disabled>Generate PDF report</button>
   </section>
+
+  </div>
 
   <section class="panel awareness-panel">
     <h2 class="panel-title">General security awareness</h2>
