@@ -397,6 +397,25 @@
   .secondary-btn:not(:disabled):hover { border-color: var(--strong); transform: translateY(-1px); }
   .secondary-btn:focus-visible { outline: 2px solid var(--strong); outline-offset: 3px; }
 
+
+  /* ---------------- Generator ---------------- */
+  .gen-panel { margin-top: 14px; }
+  .gen-tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+  .gen-tab {
+    font-family: var(--font-body); font-weight: 600; font-size: 0.85rem;
+    color: var(--text-muted); background: transparent;
+    border: 1px solid var(--line); border-radius: 9px; padding: 8px 14px; cursor: pointer;
+  }
+  .gen-tab[aria-selected="true"] { color: var(--text); background: var(--panel-2); border-color: var(--strong); }
+  .gen-options { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin-bottom: 14px; font-size: 0.88rem; }
+  .gen-options label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+  .gen-options input[type="range"] { accent-color: var(--strong); }
+  .gen-options select { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 4px 8px; }
+  .gen-row { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
+  .gen-options[hidden] { display: none; }
+  .gen-note { color: var(--text-muted); font-size: 0.84rem; }
+  .gen-note strong { color: var(--text); font-family: var(--font-mono); }
+
   .hibp-result {
     font-family: var(--font-mono);
     font-size: 0.85rem;
@@ -478,6 +497,43 @@
       </div>
 
       <p class="crack-time-hero">Time to crack (GPU attack, offline): <strong id="crackHero">&mdash;</strong></p>
+    </div>
+  </section>
+
+  <section class="panel gen-panel" id="genPanel">
+    <h2 class="panel-title">Generate a strong password or passphrase</h2>
+    <div class="gen-tabs" role="tablist">
+      <button class="gen-tab" role="tab" id="tabPassword" aria-selected="true" type="button">Random password</button>
+      <button class="gen-tab" role="tab" id="tabPassphrase" aria-selected="false" type="button">Passphrase</button>
+    </div>
+
+    <div class="gen-options" id="optsPassword">
+      <label>Length <input type="range" id="genLength" min="8" max="64" value="16" /> <strong id="genLengthVal">16</strong></label>
+      <label><input type="checkbox" id="genUpper" checked /> A-Z</label>
+      <label><input type="checkbox" id="genLower" checked /> a-z</label>
+      <label><input type="checkbox" id="genDigits" checked /> 0-9</label>
+      <label><input type="checkbox" id="genSymbols" checked /> Symbols</label>
+      <label><input type="checkbox" id="genAmbiguous" /> Avoid look-alikes</label>
+    </div>
+
+    <div class="gen-options" id="optsPassphrase" hidden>
+      <label>Words <input type="range" id="genWords" min="3" max="10" value="5" /> <strong id="genWordsVal">5</strong></label>
+      <label>Separator
+        <select id="genSep">
+          <option value="-">hyphen -</option>
+          <option value=".">dot .</option>
+          <option value="_">underscore _</option>
+          <option value=" ">space</option>
+          <option value="">none</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="genCap" /> Capitalize</label>
+      <label><input type="checkbox" id="genNum" /> Add a digit</label>
+    </div>
+
+    <div class="gen-row">
+      <button class="secondary-btn" id="genBtn" type="button">Generate &amp; analyze</button>
+      <span class="gen-note" id="genNote" aria-live="polite">Generated in your browser with a cryptographically secure random source. Nothing is sent anywhere.</span>
     </div>
   </section>
 
@@ -972,6 +1028,102 @@
   // Populate general awareness tips from the backend (single source of
   // truth in analyzer.py); fall back to a static list if unreachable,
   // e.g. when this file is opened directly rather than via Flask.
+
+  // ---- Generator (runs entirely in the browser; mirrors generator.py) ----
+  const GEN = {
+    lower: "abcdefghijklmnopqrstuvwxyz", upper: "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+    digits: "0123456789", symbols: "!@#$%^&*()-_=+[]{};:,.?/", ambiguous: "Il1O0o|`'\""
+  };
+  let wordlist = null;
+  let genMode = "password";
+
+  // Uniform random int in [0, n) via rejection sampling (no modulo bias).
+  function secureInt(n) {
+    const limit = Math.floor(0x100000000 / n) * n;
+    const buf = new Uint32Array(1);
+    do { crypto.getRandomValues(buf); } while (buf[0] >= limit);
+    return buf[0] % n;
+  }
+  function pick(str) { return str[secureInt(str.length)]; }
+
+  function genPassword() {
+    const avoid = document.getElementById("genAmbiguous").checked;
+    const pools = [];
+    [["genLower", GEN.lower], ["genUpper", GEN.upper], ["genDigits", GEN.digits], ["genSymbols", GEN.symbols]]
+      .forEach(([id, chars]) => {
+        if (document.getElementById(id).checked) {
+          pools.push(avoid ? chars.split("").filter(c => GEN.ambiguous.indexOf(c) === -1).join("") : chars);
+        }
+      });
+    if (!pools.length) return null;
+    const length = parseInt(document.getElementById("genLength").value, 10);
+    const combined = pools.join("");
+    const out = pools.map(pick);
+    while (out.length < length) out.push(pick(combined));
+    for (let i = out.length - 1; i > 0; i--) {  // Fisher-Yates
+      const j = secureInt(i + 1);
+      [out[i], out[j]] = [out[j], out[i]];
+    }
+    return { value: out.join(""), bits: length * Math.log2(combined.length) };
+  }
+
+  function genPassphrase() {
+    const n = parseInt(document.getElementById("genWords").value, 10);
+    const sep = document.getElementById("genSep").value;
+    const cap = document.getElementById("genCap").checked;
+    const addNum = document.getElementById("genNum").checked;
+    let words = [];
+    for (let i = 0; i < n; i++) words.push(wordlist[secureInt(wordlist.length)]);
+    let bits = n * Math.log2(wordlist.length);
+    if (cap) words = words.map(w => w.charAt(0).toUpperCase() + w.slice(1));
+    let value = words.join(sep);
+    if (addNum) { value += pick(GEN.digits); bits += Math.log2(10); }
+    return { value, bits };
+  }
+
+  async function runGenerator() {
+    const note = document.getElementById("genNote");
+    let result;
+    if (genMode === "passphrase") {
+      if (!wordlist) {
+        try {
+          const res = await fetch("/api/wordlist");
+          if (!res.ok) throw new Error();
+          wordlist = (await res.json()).words;
+        } catch (e) {
+          note.textContent = "Couldn't load the wordlist — passphrases need the Flask app running.";
+          return;
+        }
+      }
+      result = genPassphrase();
+    } else {
+      result = genPassword();
+      if (!result) { note.textContent = "Select at least one character type."; return; }
+    }
+    pwInput.value = result.value;
+    render(result.value);
+    note.innerHTML = "Generated with <strong>" + result.bits.toFixed(1) + " bits</strong> of true entropy. " +
+      (genMode === "passphrase"
+        ? "For passphrases, trust this number over the meter above — the meter assumes every character is random, so it overestimates."
+        : "Copy it into a password manager now; it isn't stored anywhere.");
+  }
+
+  function setGenMode(mode) {
+    genMode = mode;
+    document.getElementById("tabPassword").setAttribute("aria-selected", mode === "password");
+    document.getElementById("tabPassphrase").setAttribute("aria-selected", mode === "passphrase");
+    document.getElementById("optsPassword").hidden = mode !== "password";
+    document.getElementById("optsPassphrase").hidden = mode !== "passphrase";
+  }
+
+  document.getElementById("tabPassword").addEventListener("click", () => setGenMode("password"));
+  document.getElementById("tabPassphrase").addEventListener("click", () => setGenMode("passphrase"));
+  document.getElementById("genBtn").addEventListener("click", runGenerator);
+  [["genLength", "genLengthVal"], ["genWords", "genWordsVal"]].forEach(([inp, out]) => {
+    const el = document.getElementById(inp);
+    el.addEventListener("input", () => { document.getElementById(out).textContent = el.value; });
+  });
+
   function renderTips(tips) {
     awarenessListEl.innerHTML = "";
     tips.forEach(tip => {

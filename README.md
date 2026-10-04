@@ -15,6 +15,7 @@ the person using it *why* a password is weak, not just that it is.
 - **Common-password / breach detection** — checked locally against a real 10,000-entry breached-password list (SecLists), with basic leetspeak normalization (`p@ssw0rd` → `password`) and trailing-digit stripping (`password123` → `password`). Optionally, click **"Check Have I Been Pwned"** to query the live HIBP database of 800M+ breached passwords via k-anonymity — only the first 5 characters of a SHA-1 hash are sent (computed in-browser via Web Crypto), so the password itself never leaves the device. Also available via `cli.py --live`.
 - **Entropy & crack-time estimation** — bits of entropy plus estimated time to crack under four attack scenarios (throttled online, unthrottled online, offline slow hash, offline fast GPU hash).
 - **Tailored recommendations** — specific, actionable fixes generated from what's actually missing in the password entered.
+- **Password & passphrase generator** — cryptographically secure (`secrets` in Python, `crypto.getRandomValues` in the browser). Random passwords (length, character types, optional look-alike exclusion, at least one character per selected type) or diceware-style passphrases (3–12 words from a 2048-word list, 11 bits/word; optional separator, capitalization, trailing digit). The result is fed straight into the strength meter, and the *true* generator entropy is shown alongside it — for passphrases, that figure is more honest than the meter's per-character estimate. Browser generation never sends anything over the network. Also available via `cli.py --generate` / `--passphrase` and `POST /api/generate`.
 - **General security awareness tips** — always-visible, password-independent guidance (password managers, MFA, phishing, breach checking).
 - **PDF report generation** — one-click downloadable report with the score, checklist, crack-time table, and recommendations. The password itself is masked in the report and never written to disk or logged anywhere.
 
@@ -25,11 +26,13 @@ password-strength-analyzer/
 ├── app.py                # Flask app: serves the UI + JSON/PDF API endpoints
 ├── analyzer.py            # Core analysis engine (entropy, checks, scoring, recommendations)
 ├── hibp_checker.py         # Live breach check against the HIBP Pwned Passwords API (k-anonymity)
+├── generator.py           # Secure password / passphrase generator
 ├── report_generator.py    # Builds the PDF report from an analyzer.py result
 ├── cli.py                 # Terminal interface — same engine, no browser needed
 ├── requirements.txt
 ├── data/
-│   └── common_passwords.txt   # 10,000-entry common/breached password list
+│   ├── common_passwords.txt   # 10,000-entry common/breached password list
+│   └── wordlist.txt           # 2048-word passphrase list (BIP-39 English; distinct 4-letter prefixes)
 └── templates/
     └── index.html          # Self-contained UI (inline CSS + JS, dark "security console" theme)
 ```
@@ -49,6 +52,13 @@ To use the CLI instead (no server needed):
 python cli.py                       # interactive, hidden input
 python cli.py "SomePassword123"     # analyze directly
 python cli.py --report "SomePassword123"   # also writes a PDF report to the current folder
+```
+
+Generator examples:
+
+```bash
+python cli.py --generate --length 20 --avoid-ambiguous
+python cli.py --passphrase --words 6 --capitalize --add-number --separator .
 ```
 
 ## How scoring works

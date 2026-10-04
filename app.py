@@ -9,6 +9,8 @@ Routes
 GET  /              -> the single-page UI
 POST /api/analyze   -> JSON {password} in, live analysis JSON out
 POST /api/report     -> JSON {password} in, a downloadable PDF report out
+POST /api/generate  -> JSON options in, generated password/passphrase + analysis out
+GET  /api/wordlist  -> the (public) passphrase wordlist, for in-browser generation
 
 Security notes
 ---------------
@@ -30,6 +32,7 @@ import os
 import tempfile
 
 from analyzer import analyze_password, SECURITY_AWARENESS_TIPS
+import generator
 
 app = Flask(__name__)
 app.config["JSON_SORT_KEYS"] = False
@@ -101,6 +104,47 @@ def api_report():
         as_attachment=True,
         download_name="password_security_report.pdf",
     )
+
+
+def _as_bool(value, default):
+    return default if value is None else bool(value)
+
+
+@app.route("/api/generate", methods=["POST"])
+def api_generate():
+    """Generate a random password or passphrase and analyze it.
+
+    The result is generated server-side from the OS CSPRNG and returned
+    once; nothing is stored or logged. (The bundled UI generates in the
+    browser instead, so the secret never travels at all.)"""
+    data = request.get_json(silent=True) or {}
+    try:
+        if data.get("mode", "password") == "passphrase":
+            out = generator.generate_passphrase(
+                words=int(data.get("words", 5)),
+                separator=str(data.get("separator", "-")),
+                capitalize=_as_bool(data.get("capitalize"), False),
+                add_number=_as_bool(data.get("add_number"), False),
+            )
+        else:
+            out = generator.generate_password(
+                length=int(data.get("length", 16)),
+                lowercase=_as_bool(data.get("lowercase"), True),
+                uppercase=_as_bool(data.get("uppercase"), True),
+                digits=_as_bool(data.get("digits"), True),
+                symbols=_as_bool(data.get("symbols"), True),
+                avoid_ambiguous=_as_bool(data.get("avoid_ambiguous"), False),
+            )
+    except (ValueError, TypeError) as exc:
+        return jsonify({"error": str(exc)}), 400
+    out["analysis"] = analyze_password(out["value"])
+    return jsonify(out)
+
+
+@app.route("/api/wordlist")
+def api_wordlist():
+    """Public, non-secret wordlist so the browser can build passphrases locally."""
+    return jsonify({"words": generator.WORDLIST})
 
 
 @app.route("/api/tips")
