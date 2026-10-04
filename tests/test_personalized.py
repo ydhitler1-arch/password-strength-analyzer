@@ -46,6 +46,7 @@ def test_too_few_details_falls_back_to_random():
 def test_dob_parsing():
     assert p._dob_digits("14/07/1999") == ("14", "07", "1999")
     assert p._dob_digits("1999-7-4") == ("04", "07", "1999")
+    assert p._dob_digits("13052006") == ("13", "05", "2006")
     assert p._dob_digits("nonsense") is None
 
 

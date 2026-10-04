@@ -549,7 +549,7 @@
     <p class="muted">Give a few details and get several different password patterns to choose from. Pick one to run it through the analyzer. Your details are only used as memory hooks &mdash; the strength comes from random characters added around them, and is scored on that random part alone.</p>
     <div class="pers-form">
       <label>Name <input type="text" id="persName" maxlength="64" autocomplete="off" placeholder="e.g. Rahul Sharma" /></label>
-      <label>Date of birth <input type="text" id="persDob" maxlength="20" autocomplete="off" placeholder="DD/MM/YYYY" /></label>
+      <label>Date of birth <input type="text" id="persDob" maxlength="10" inputmode="numeric" autocomplete="off" placeholder="DD/MM/YYYY" /></label>
       <label>Favourite things <input type="text" id="persFavs" maxlength="256" autocomplete="off" placeholder="e.g. cricket, biryani, Hyderabad" /></label>
     </div>
     <label class="pers-use-current"><input type="checkbox" id="persUseCurrent" disabled /> Also strengthen the password I typed above</label>
@@ -1290,6 +1290,16 @@
     persNote.hidden = !data.note;
     persNote.textContent = data.note || "";
   }
+
+  // Auto-format date of birth as DD/MM/YYYY while typing (13052006 -> 13/05/2006)
+  const persDob = document.getElementById("persDob");
+  persDob.addEventListener("input", () => {
+    const d = persDob.value.replace(/\D/g, "").slice(0, 8);
+    let out = d.slice(0, 2);
+    if (d.length > 2) out += "/" + d.slice(2, 4);
+    if (d.length > 4) out += "/" + d.slice(4);
+    persDob.value = out;
+  });
 
   persBtn.addEventListener("click", async () => {
     const body = {

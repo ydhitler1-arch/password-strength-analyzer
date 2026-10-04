@@ -53,7 +53,8 @@ def _tokens(*fields) -> list:
 
 def _dob_digits(dob: str):
     """Return (day, month, year) digit strings from common DOB formats, or None."""
-    m = re.fullmatch(r"\s*(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})\s*", dob or "")
+    dob = re.sub(r"^\s*(\d{2})(\d{2})(\d{4})\s*$", r"\1/\2/\3", dob or "")  # 13052006 -> 13/05/2006
+    m = re.fullmatch(r"\s*(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})\s*", dob)
     if m:
         y, mo, d = m.groups()
     else:
