@@ -9,6 +9,7 @@ Routes
 GET  /              -> the single-page UI
 POST /api/analyze   -> JSON {password} in, live analysis JSON out
 POST /api/report     -> JSON {password} in, a downloadable PDF report out
+POST /api/personalize -> name/dob/favourites (+optional weak password) in, analyzed suggestions out
 POST /api/generate  -> JSON options in, generated password/passphrase + analysis out
 GET  /api/wordlist  -> the (public) passphrase wordlist, for in-browser generation
 
@@ -33,6 +34,7 @@ import tempfile
 
 from analyzer import analyze_password, SECURITY_AWARENESS_TIPS
 import generator
+import personalized
 
 app = Flask(__name__)
 app.config["JSON_SORT_KEYS"] = False
@@ -139,6 +141,24 @@ def api_generate():
         return jsonify({"error": str(exc)}), 400
     out["analysis"] = analyze_password(out["value"])
     return jsonify(out)
+
+
+@app.route("/api/personalize", methods=["POST"])
+def api_personalize():
+    """Suggest several personalized password patterns, each already analyzed.
+
+    JSON in: {name, dob, favorites, base_password?}. `base_password` (the
+    user's own weak password) is optional. Nothing is stored or logged.
+    NOTE: unlike the live meter, this one request does send these details
+    (and the optional base password) to the local Flask server."""
+    data = request.get_json(silent=True) or {}
+    base = data.get("base_password") or ""
+    if not isinstance(base, str) or len(base) > 256:
+        return jsonify({"error": "Invalid base password."}), 400
+    profile = {k: data.get(k) for k in ("name", "dob", "favorites")}
+    if not any(profile.values()) and not base:
+        return jsonify({"error": "Give at least one detail (name, date of birth, favourites) or a password to strengthen."}), 400
+    return jsonify(personalized.suggest(profile, base))
 
 
 @app.route("/api/wordlist")

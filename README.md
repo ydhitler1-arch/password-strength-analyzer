@@ -16,6 +16,7 @@ the person using it *why* a password is weak, not just that it is.
 - **Entropy & crack-time estimation** — bits of entropy plus estimated time to crack under four attack scenarios (throttled online, unthrottled online, offline slow hash, offline fast GPU hash).
 - **Tailored recommendations** — specific, actionable fixes generated from what's actually missing in the password entered.
 - **Password & passphrase generator** — cryptographically secure (`secrets` in Python, `crypto.getRandomValues` in the browser). Random passwords (length, character types, optional look-alike exclusion, at least one character per selected type) or diceware-style passphrases (3–12 words from a 2048-word list, 11 bits/word; optional separator, capitalization, trailing digit). The result is fed straight into the strength meter, and the *true* generator entropy is shown alongside it — for passphrases, that figure is more honest than the meter's per-character estimate. Browser generation never sends anything over the network. Also available via `cli.py --generate` / `--passphrase` and `POST /api/generate`.
+- **Personalized suggestions** — enter a name, date of birth and favourite things and get 3+ differently-shaped passwords (anchor + random block, personal passphrase, initials + random tail), each already run through the analyzer. Pick one to load it into the meter for the full breakdown. If the password you typed is weak, the page prompts for those details and also offers an "upgrade" of your own password that keeps its recognisable core. Personal details are only memory anchors: strength is credited from the random parts alone (`random_entropy_bits`), so suggestions hold up even if someone knows your details. The tool also warns when your current password contains your name or birth date. API: `POST /api/personalize`.
 - **General security awareness tips** — always-visible, password-independent guidance (password managers, MFA, phishing, breach checking).
 - **PDF report generation** — one-click downloadable report with the score, checklist, crack-time table, and recommendations. The password itself is masked in the report and never written to disk or logged anywhere.
 
@@ -26,6 +27,7 @@ password-strength-analyzer/
 ├── app.py                # Flask app: serves the UI + JSON/PDF API endpoints
 ├── analyzer.py            # Core analysis engine (entropy, checks, scoring, recommendations)
 ├── hibp_checker.py         # Live breach check against the HIBP Pwned Passwords API (k-anonymity)
+├── personalized.py        # Personalized suggestions from name/DOB/favourites (+ upgrading a weak password)
 ├── generator.py           # Secure password / passphrase generator
 ├── report_generator.py    # Builds the PDF report from an analyzer.py result
 ├── cli.py                 # Terminal interface — same engine, no browser needed

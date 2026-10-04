@@ -416,6 +416,32 @@
   .gen-note { color: var(--text-muted); font-size: 0.84rem; }
   .gen-note strong { color: var(--text); font-family: var(--font-mono); }
 
+
+  /* ---------------- Personalized suggestions ---------------- */
+  .pers-panel { margin-top: 14px; }
+  .pers-panel.attention { border-color: var(--weak, #e5484d); }
+  .pers-banner {
+    background: var(--panel-2); border-left: 3px solid #e5484d; border-radius: 8px;
+    padding: 10px 14px; margin: 0 0 14px; font-size: 0.9rem;
+  }
+  .pers-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin-bottom: 14px; }
+  .pers-form label { display: flex; flex-direction: column; gap: 5px; font-size: 0.82rem; color: var(--text-muted); }
+  .pers-form input[type="text"] {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 8px; padding: 9px 11px; font-family: var(--font-body); font-size: 0.92rem;
+  }
+  .pers-form input[type="text"]:focus-visible { outline: 2px solid var(--strong); outline-offset: 2px; }
+  .pers-use-current { display: flex; align-items: center; gap: 8px; font-size: 0.88rem; margin-bottom: 14px; }
+  .pers-warnings { color: #e5a23c; font-size: 0.86rem; margin: 12px 0 0; padding-left: 18px; }
+  .pers-results { display: grid; gap: 12px; margin-top: 16px; }
+  .pers-card { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .pers-card h3 { margin: 0 0 4px; font-size: 0.95rem; font-family: var(--font-display); }
+  .pers-card p { margin: 0 0 10px; font-size: 0.84rem; color: var(--text-muted); }
+  .pers-value { font-family: var(--font-mono); font-size: 1.02rem; word-break: break-all; margin-bottom: 10px; }
+  .pers-meta { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; font-size: 0.82rem; color: var(--text-muted); }
+  .pers-meta strong { color: var(--text); }
+  .pers-note { color: var(--text-muted); font-size: 0.82rem; margin: 12px 0 0; }
+
   .hibp-result {
     font-family: var(--font-mono);
     font-size: 0.85rem;
@@ -498,6 +524,27 @@
 
       <p class="crack-time-hero">Time to crack (GPU attack, offline): <strong id="crackHero">&mdash;</strong></p>
     </div>
+  </section>
+
+  <section class="panel pers-panel" id="persPanel">
+    <h2 class="panel-title">Personalized password suggestions</h2>
+    <div class="pers-banner" id="persBanner" hidden>
+      Your current password is weak. Tell us a little about yourself and we'll suggest stronger ones built from it.
+    </div>
+    <p class="muted">Give a few details and get several different password patterns to choose from. Pick one to run it through the analyzer. Your details are only used as memory hooks &mdash; the strength comes from random characters added around them, and is scored on that random part alone.</p>
+    <div class="pers-form">
+      <label>Name <input type="text" id="persName" maxlength="64" autocomplete="off" placeholder="e.g. Rahul Sharma" /></label>
+      <label>Date of birth <input type="text" id="persDob" maxlength="20" autocomplete="off" placeholder="DD/MM/YYYY" /></label>
+      <label>Favourite things <input type="text" id="persFavs" maxlength="256" autocomplete="off" placeholder="e.g. cricket, biryani, Hyderabad" /></label>
+    </div>
+    <label class="pers-use-current"><input type="checkbox" id="persUseCurrent" disabled /> Also strengthen the password I typed above</label>
+    <div class="gen-row">
+      <button class="secondary-btn" id="persBtn" type="button">Suggest passwords</button>
+      <span class="gen-note" id="persStatus" aria-live="polite">These details are sent once to this app's local server to build suggestions. They are not stored or logged.</span>
+    </div>
+    <ul class="pers-warnings" id="persWarnings" hidden></ul>
+    <div class="pers-results" id="persResults"></div>
+    <p class="pers-note" id="persNote" hidden></p>
   </section>
 
   <section class="panel gen-panel" id="genPanel">
@@ -891,6 +938,8 @@
     lastCheckedPassword = pw;
     hibpBtn.disabled = !pw;
 
+    updatePersonalPrompt(pw, r.score);
+
     // Report button + flow strip state
     reportBtn.disabled = !pw;
     if (pw) {
@@ -903,7 +952,6 @@
   }
 
   pwInput.addEventListener("input", () => render(pwInput.value));
-  render("");
 
   toggleBtn.addEventListener("click", () => {
     const showing = pwInput.type === "text";
@@ -1123,6 +1171,98 @@
     const el = document.getElementById(inp);
     el.addEventListener("input", () => { document.getElementById(out).textContent = el.value; });
   });
+
+
+  // ---- Personalized suggestions ----
+  const persBtn = document.getElementById("persBtn");
+  const persStatus = document.getElementById("persStatus");
+  const persResults = document.getElementById("persResults");
+  const persWarnings = document.getElementById("persWarnings");
+  const persNote = document.getElementById("persNote");
+  const persBanner = document.getElementById("persBanner");
+  const persPanel = document.getElementById("persPanel");
+  const persUseCurrent = document.getElementById("persUseCurrent");
+  const WEAK_BELOW = 65;
+
+  function esc(t) {
+    const d = document.createElement("div");
+    d.textContent = t;
+    return d.innerHTML;
+  }
+
+  // Called from render(): offer help whenever the typed password is weak.
+  function updatePersonalPrompt(pw, score) {
+    const weak = !!pw && score < WEAK_BELOW;
+    persBanner.hidden = !weak;
+    persPanel.classList.toggle("attention", weak);
+    persUseCurrent.disabled = !pw;
+    if (!pw) persUseCurrent.checked = false;
+    else if (weak && !persUseCurrent.dataset.touched) persUseCurrent.checked = true;
+  }
+  persUseCurrent.addEventListener("change", () => { persUseCurrent.dataset.touched = "1"; });
+
+  function renderSuggestions(data) {
+    persResults.innerHTML = "";
+    persWarnings.innerHTML = "";
+    persWarnings.hidden = !(data.warnings && data.warnings.length);
+    (data.warnings || []).forEach(w => {
+      const li = document.createElement("li");
+      li.textContent = w;
+      persWarnings.appendChild(li);
+    });
+    (data.suggestions || []).forEach(sug => {
+      const card = document.createElement("div");
+      card.className = "pers-card";
+      card.innerHTML =
+        "<h3>" + esc(sug.pattern) + "</h3><p>" + esc(sug.description) + "</p>" +
+        '<div class="pers-value">' + esc(sug.value) + "</div>" +
+        '<div class="pers-meta"><span>Score <strong>' + sug.analysis.score + "/100</strong> (" + esc(sug.analysis.label) + ")</span>" +
+        "<span>Random entropy <strong>" + sug.random_entropy_bits + " bits</strong></span>" +
+        "<span>" + esc(sug.targeted_strength) + "</span></div>";
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "secondary-btn";
+      btn.style.marginTop = "12px";
+      btn.textContent = "Analyze this one";
+      btn.addEventListener("click", () => {
+        pwInput.value = sug.value;
+        render(sug.value);
+        document.querySelector(".hero").scrollIntoView({ behavior: "smooth" });
+      });
+      card.appendChild(btn);
+      persResults.appendChild(card);
+    });
+    persNote.hidden = !data.note;
+    persNote.textContent = data.note || "";
+  }
+
+  persBtn.addEventListener("click", async () => {
+    const body = {
+      name: document.getElementById("persName").value,
+      dob: document.getElementById("persDob").value,
+      favorites: document.getElementById("persFavs").value,
+    };
+    if (persUseCurrent.checked && pwInput.value) body.base_password = pwInput.value;
+    persBtn.disabled = true;
+    persStatus.textContent = "Building suggestions…";
+    try {
+      const res = await fetch("/api/personalize", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) { persStatus.textContent = data.error || "Something went wrong."; return; }
+      renderSuggestions(data);
+      persStatus.textContent = data.suggestions.length
+        ? "Pick one and press “Analyze this one” to see its full breakdown."
+        : "Couldn't build suggestions — try adding more details.";
+    } catch (e) {
+      persStatus.textContent = "Couldn't reach the server — this feature needs the Flask app running.";
+    } finally {
+      persBtn.disabled = false;
+    }
+  });
+
+  render("");
 
   function renderTips(tips) {
     awarenessListEl.innerHTML = "";
