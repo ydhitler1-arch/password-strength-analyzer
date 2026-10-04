@@ -30,9 +30,8 @@ def test_wordlist(client):
 
 
 def test_personalize(client):
-    r = client.post("/api/personalize", json={"name": "Asha Rao", "favorites": "tennis, mango"})
-    assert r.status_code == 200 and len(r.get_json()["suggestions"]) >= 3
-    assert {s["tier"] for s in r.get_json()["suggestions"]} == {"easy", "strong"}
+    r = client.post("/api/personalize", json={"name": "Asha Rao", "favorites": "tennis, mango", "dob": "04/08/2001"})
+    assert r.status_code == 200 and len(r.get_json()["suggestions"]) == 2
 
 
 def test_personalize_requires_input(client):
@@ -41,3 +40,9 @@ def test_personalize_requires_input(client):
 
 def test_personalize_rejects_oversized_base(client):
     assert client.post("/api/personalize", json={"base_password": "a" * 300}).status_code == 400
+
+
+def test_personalize_count_and_bad_count(client):
+    body = {"name": "Asha", "favorites": "tennis, mango", "dob": "04/08/2001"}
+    assert len(client.post("/api/personalize", json={**body, "count": 1}).get_json()["suggestions"]) == 1
+    assert client.post("/api/personalize", json={**body, "count": "x"}).status_code == 400

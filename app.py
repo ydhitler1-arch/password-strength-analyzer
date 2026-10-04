@@ -147,7 +147,7 @@ def api_generate():
 def api_personalize():
     """Suggest several personalized password patterns, each already analyzed.
 
-    JSON in: {name, dob, favorites, base_password?}. `base_password` (the
+    JSON in: {name, dob, favorites, base_password?, count?=2}. `base_password` (the
     user's own weak password) is optional. Nothing is stored or logged.
     NOTE: unlike the live meter, this one request does send these details
     (and the optional base password) to the local Flask server."""
@@ -158,7 +158,11 @@ def api_personalize():
     profile = {k: data.get(k) for k in ("name", "dob", "favorites")}
     if not any(profile.values()) and not base:
         return jsonify({"error": "Give at least one detail (name, date of birth, favourites) or a password to strengthen."}), 400
-    return jsonify(personalized.suggest(profile, base))
+    try:
+        count = int(data.get("count", personalized.DEFAULT_COUNT))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid count."}), 400
+    return jsonify(personalized.suggest(profile, base, count))
 
 
 @app.route("/api/wordlist")

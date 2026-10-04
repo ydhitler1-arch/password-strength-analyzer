@@ -1,39 +1,35 @@
 """
 personalized.py
 ---------------
-Suggests several differently-shaped passwords built from details the user
-gives (name, date of birth, favourite things) and/or from a weak password
-they already have, and runs every suggestion through analyzer.py.
+Suggests passwords built ONLY from what the user typed: their name, date of
+birth, favourite things (and, when strengthening, their current password).
+The only characters added are separator symbols. Nothing random is mixed in,
+so every suggestion can be remembered from the details alone. Each result is
+run through analyzer.py.
 
-Security model -- why personal details are only a *memory anchor*
------------------------------------------------------------------
-Anything derived from personal details can be guessed by someone who knows
-(or can look up) those details. So each suggestion mixes personal fragments
-with CSPRNG-generated material, and the strength we report counts ONLY the
-random part (`random_entropy_bits`) -- personal fragments are credited with
-zero bits. That number is the honest estimate against a targeted attacker.
-
-Nothing here is stored or logged; inputs live in memory for one request.
+Trade-off, stated plainly: these are readable mixes of personal details, so
+someone who knows those details could guess them. Use them for low-risk
+accounts; use the random generator for important ones. Inputs live in memory
+for one request and are never stored or logged.
 """
 
-import math
 import re
 import secrets
 
 import analyzer
-import generator
 
 MAX_FIELD_LEN = 64
 MAX_TOKENS = 20
 MAX_TOKEN_LEN = 12
-MIN_ACCEPT_SCORE = 75
-MIN_EASY_SCORE = 65
+MIN_SCORE = 60
+DEFAULT_COUNT = 2
+MAX_COUNT = 4
 
-LOWER_DIGITS = generator.LOWER + generator.DIGITS
-FULL_POOL = generator.LOWER + generator.UPPER + generator.DIGITS + generator.SYMBOLS
-# Symbols that are easy to type and accepted by nearly every site.
-SAFE_SYMBOLS = "!@#$%^&*-_=+?"
-LEET = {"a": "@", "e": "3", "i": "!", "o": "0", "s": "$", "t": "7"}
+SYMBOLS = "@#$%&*!._-"
+
+NOTE = ("Built only from your own details, so they're easy to remember -- but someone who knows "
+        "you could guess them. Avoid them for important accounts; use the random generator there.")
+HINT = "Easy to remember, but easier to guess for someone who knows your details."
 
 
 def _clean(value, limit=MAX_FIELD_LEN) -> str:
@@ -59,36 +55,11 @@ def _dob_digits(dob: str):
     if m:
         y, mo, d = m.groups()
     else:
-        m = re.fullmatch(r"\s*(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})\s*", dob or "")
+        m = re.fullmatch(r"\s*(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})\s*", dob)
         if not m:
             return None
         d, mo, y = m.groups()
     return d.zfill(2), mo.zfill(2), y
-
-
-def _personal_words(profile: dict) -> list:
-    return _tokens(profile.get("name"), profile.get("favorites"))
-
-
-def _rand_str(pool: str, n: int) -> str:
-    return "".join(secrets.choice(pool) for _ in range(n))
-
-
-def _bits(pool: str, n: int) -> float:
-    return n * math.log2(len(pool))
-
-
-def _style(word: str) -> str:
-    """Capitalise and leet-substitute a random subset of letters.
-    The substitutions are NOT counted as entropy."""
-    word = word.capitalize()
-    out = []
-    for i, ch in enumerate(word):
-        if i > 0 and ch.lower() in LEET and secrets.randbelow(2):
-            out.append(LEET[ch.lower()])
-        else:
-            out.append(ch)
-    return "".join(out)
 
 
 def _shuffled(items: list) -> list:
@@ -97,217 +68,110 @@ def _shuffled(items: list) -> list:
     return items
 
 
-# --- pattern builders: each returns (value, random_bits) ------------------
-
-def _anchor_block(words, profile):
-    """Word + random block + word -- easiest to remember."""
-    a, b = (_shuffled(words) + _shuffled(words))[:2]
-    block = _rand_str(LOWER_DIGITS, 8)
-    s1, s2 = secrets.choice(SAFE_SYMBOLS), secrets.choice(SAFE_SYMBOLS)
-    return (f"{_style(a)}{s1}{block}{s2}{_style(b)}",
-            _bits(LOWER_DIGITS, 8) + 2 * math.log2(len(SAFE_SYMBOLS)))
+def _sym() -> str:
+    return secrets.choice(SYMBOLS)
 
 
-def _word_chain(words, profile):
-    """One personal word + random dictionary words, passphrase style."""
-    mine = secrets.choice(words)
-    picks = [secrets.choice(generator.WORDLIST).capitalize() for _ in range(4)]
-    parts = _shuffled([_style(mine)] + picks)
-    sep = secrets.choice("-._")
-    digits = _rand_str(generator.DIGITS, 2)
-    sym = secrets.choice(SAFE_SYMBOLS)
-    bits = 4 * math.log2(len(generator.WORDLIST)) + _bits(generator.DIGITS, 2) \
-        + math.log2(len(SAFE_SYMBOLS)) + math.log2(3)
-    return sep.join(parts) + digits + sym, bits
+class _Frags:
+    """The user's own pieces. Missing ones are simply None / empty."""
+
+    def __init__(self, profile: dict, base_password: str = ""):
+        names = _tokens(profile.get("name"))
+        self.name = names[0] if names else None
+        self.favs = _shuffled(_tokens(profile.get("favorites")))
+        dob = _dob_digits(profile.get("dob"))
+        self.day, self.month, self.year4 = dob if dob else (None, None, None)
+        self.yy = self.year4[-2:] if dob else None
+        letters = re.sub(r"[^A-Za-z]", "", base_password or "")[:10]
+        self.core = letters if len(letters) >= 2 else None
+        digit_runs = re.findall(r"\d+", base_password or "")
+        self.base_digits = max(digit_runs, key=len)[:8] if digit_runs else None
+
+    def has(self, need: str) -> bool:
+        return {
+            "name": self.name, "fav": self.favs, "fav2": len(self.favs) >= 2,
+            "dob": self.day, "core": self.core,
+        }[need] not in (None, [], False)
 
 
-def _initials_mix(words, profile):
-    """Initials of your details + a date anchor + a fully random tail."""
-    initials = "".join(w[0].upper() if i % 2 == 0 else w[0].lower()
-                       for i, w in enumerate(words[:4]))
-    dob = _dob_digits(profile.get("dob"))
-    anchor = (dob[0] + dob[1]) if dob else ""   # memory aid, 0 bits credited
-    tail = _rand_str(FULL_POOL, 8)
-    return f"{initials}{secrets.choice(SAFE_SYMBOLS)}{anchor}{tail}", \
-        _bits(FULL_POOL, 8) + math.log2(len(SAFE_SYMBOLS))
+# Each builder returns a password made only from _Frags pieces plus symbols.
+def _short(f):    return f"{f.name[:3].capitalize()}{_sym()}{f.day}{f.favs[0][:4].lower()}{_sym()}{f.yy}"
+def _reverse(f):  return f"{f.favs[0].lower()}{_sym()}{f.name[:3].lower()}{_sym()}{f.yy}"
+def _full(f):     return f"{f.name.capitalize()}{_sym()}{f.favs[0].capitalize()}{_sym()}{f.day}{f.month}"
+def _flip(f):     return f"{f.favs[0].lower()}{_sym()}{f.name.capitalize()}{_sym()}{f.month}{f.yy}"
+def _two_favs(f): return f"{f.favs[0].lower()}{_sym()}{f.favs[1].capitalize()}{_sym()}{f.day}{f.yy}"
+def _year(f):     return f"{f.name.capitalize()}{_sym()}{f.year4}{_sym()}{f.day}"
+def _name_fav(f): return f"{f.name.capitalize()}{_sym()}{f.favs[0].lower()}{_sym()}{f.name[:3].upper()}"
+def _name_dob(f): return f"{f.name.capitalize()}{_sym()}{f.day}{f.month}{_sym()}{f.month}{f.yy}"
 
 
-def _upgrade_base(base: str):
-    """Keep a recognisable core of the user's own password, harden around it."""
-    core = re.sub(r"[^A-Za-z]", "", base)[:10] or "Pass"
-    tail = _rand_str(FULL_POOL, 8)
-    pre = _rand_str(LOWER_DIGITS, 2)
-    return f"{pre}{_style(core)}{secrets.choice(SAFE_SYMBOLS)}{tail}", \
-        _bits(FULL_POOL, 8) + _bits(LOWER_DIGITS, 2) + math.log2(len(SAFE_SYMBOLS))
+def _keep_yours(f):
+    """Your own password's word and digits, tidied up and joined with symbols."""
+    digits = None
+    if f.base_digits:
+        d = f.base_digits   # use the whole run or a slice of it, avoiding 3-in-a-row repeats
+        options = [x for x in {d, d[:2], d[-2:], d[:3], d[-3:], d[:4], d[-4:]}
+                   if len(x) >= 2 and not re.search(r"(.)\1\1", x)]
+        digits = secrets.choice(options) if options else None
+    if digits is None and f.day:
+        digits = f.day + f.month
+    tail = (f.favs[0].lower() if f.favs else None) or (f.name.lower() if f.name else None) or f.core[:3].lower()
+    mid = f"{_sym()}{digits}" if digits else ""
+    return f"{f.core.capitalize()}{mid}{_sym()}{tail}"
 
 
-def _fully_random(words, profile):
-    """Fallback with no personal data at all."""
-    out = generator.generate_password(16, avoid_ambiguous=True)
-    return out["value"], out["generator_entropy_bits"]
-
-
-
-# --- "easy to remember" builders ------------------------------------------
-# Readable combinations of the user's own details (Dev@13crik#06). They are
-# quick to remember but guessable by someone who knows the details, so the
-# only entropy credited is the separators (and any stand-in word/digits used
-# when the user left a field empty).
-
-EASY_SYMBOLS = "@#$%&*!._-"
-
-
-def _parts(profile, words):
-    """Split the profile into reusable fragments, with stand-ins (counted as
-    random bits) for anything the user didn't give."""
-    name_tokens = _tokens(profile.get("name"))
-    fav_tokens = _tokens(profile.get("favorites"))
-    name = name_tokens[0] if name_tokens else None
-    dob = _dob_digits(profile.get("dob"))
-    return name, _shuffled(fav_tokens), dob
-
-
-def _sym():
-    return secrets.choice(EASY_SYMBOLS)
-
-
-def _easy_ctx(profile, words):
-    name, favs, dob = _parts(profile, words)
-    bits = 0.0
-    if name is None:
-        name = secrets.choice(generator.WORDLIST)
-        bits += math.log2(len(generator.WORDLIST))
-    def fav(i):
-        nonlocal bits
-        if favs:
-            return favs[i % len(favs)]
-        bits += math.log2(len(generator.WORDLIST))
-        return secrets.choice(generator.WORDLIST)
-    def digits(kind):
-        """kind: 'day', 'month', 'yy', 'dm' (day+month), 'my' (month+yy)"""
-        nonlocal bits
-        if dob:
-            d, m, y = dob
-            return {"day": d, "month": m, "yy": y[-2:], "dm": d + m, "my": m + y[-2:]}[kind]
-        n = 4 if kind in ("dm", "my") else 2
-        bits += _bits(generator.DIGITS, n)
-        return _rand_str(generator.DIGITS, n)
-    return name, fav, digits, lambda: bits
-
-
-def _easy_short(words, profile):
-    """Dev@13crik#06  -- name start, day, favourite start, year."""
-    name, fav, digits, getbits = _easy_ctx(profile, words)
-    s1, s2 = _sym(), _sym()
-    value = f"{name[:3].capitalize()}{s1}{digits('day')}{fav(0)[:4].lower()}{s2}{digits('yy')}"
-    return value, getbits() + 2 * math.log2(len(EASY_SYMBOLS))
-
-
-def _easy_reverse(words, profile):
-    """cricket.dev#06  -- favourite, name start, year."""
-    name, fav, digits, getbits = _easy_ctx(profile, words)
-    s1, s2 = _sym(), _sym()
-    value = f"{fav(1).lower()}{s1}{name[:3].lower()}{s2}{digits('yy')}"
-    return value, getbits() + 2 * math.log2(len(EASY_SYMBOLS))
-
-
-def _easy_full(words, profile):
-    """Devan@Cricket#1305  -- full name, full favourite, day+month."""
-    name, fav, digits, getbits = _easy_ctx(profile, words)
-    s1, s2 = _sym(), _sym()
-    value = f"{name.capitalize()}{s1}{fav(2).capitalize()}{s2}{digits('dm')}"
-    return value, getbits() + 2 * math.log2(len(EASY_SYMBOLS))
-
-
-def _easy_flip(words, profile):
-    """cricket_Devan$0506  -- favourite, full name, month+year."""
-    name, fav, digits, getbits = _easy_ctx(profile, words)
-    s1, s2 = _sym(), _sym()
-    value = f"{fav(3).lower()}{s1}{name.capitalize()}{s2}{digits('my')}"
-    return value, getbits() + 2 * math.log2(len(EASY_SYMBOLS))
-
-
-def _easy_upgrade(base: str):
-    """Your own word, kept readable: Rahul-Tiger-Blue@47"""
-    core = (re.sub(r"[^A-Za-z]", "", base)[:10] or "Pass").capitalize()
-    w1 = secrets.choice(generator.WORDLIST).capitalize()
-    w2 = secrets.choice(generator.WORDLIST).capitalize()
-    sep, sym = secrets.choice("-._"), _sym()
-    digits = _rand_str(generator.DIGITS, 2)
-    return f"{core}{sep}{w1}{sep}{w2}{sym}{digits}", \
-        2 * math.log2(len(generator.WORDLIST)) + math.log2(3) + math.log2(len(EASY_SYMBOLS)) + _bits(generator.DIGITS, 2)
-
-
-EASY_PATTERNS = [
-    ("Short & familiar", "Start of your name, birth day, start of a favourite, then the year. Quick to type and remember.", _easy_short),
-    ("Favourite first", "A favourite thing, the start of your name, then the year.", _easy_reverse),
-    ("Name + favourite", "Your name and a favourite thing in full, joined by symbols, with your birth day and month.", _easy_full),
-    ("Favourite + name", "A favourite thing, your name, then birth month and year.", _easy_flip),
+PATTERNS = [
+    ("Short & familiar", "Start of your name, birth day, start of a favourite, then the year.", ("name", "fav", "dob"), _short),
+    ("Favourite first", "A favourite thing, the start of your name, then the year.", ("name", "fav", "dob"), _reverse),
+    ("Name + favourite", "Your name and a favourite thing in full, with your birth day and month.", ("name", "fav", "dob"), _full),
+    ("Favourite + name", "A favourite thing, your name, then birth month and year.", ("name", "fav", "dob"), _flip),
+    ("Two favourites", "Two of your favourite things with your birth day and year.", ("fav2", "dob"), _two_favs),
+    ("Name + birth year", "Your name, your birth year and birth day.", ("name", "dob"), _year),
+    ("Name + date", "Your name with your birth day, month and year in pieces.", ("name", "dob"), _name_dob),
+    ("Name + favourite (no date)", "Your name, a favourite thing, and the start of your name in capitals.", ("name", "fav"), _name_fav),
 ]
 
-EASY_NOTE = "Easy to remember, but easier to guess for someone who knows your details."
-
-STRONG_PATTERNS = [
-    ("Anchor + random block",
-     "Two of your words wrapped around a random 8-character block. Easy to recall the words; the block carries the strength.",
-     _anchor_block, True),
-    ("Personal passphrase",
-     "One of your words mixed with four random dictionary words, a separator, digits and a symbol. Long and memorable.",
-     _word_chain, True),
-    ("Initials + random tail",
-     "Initials of your details, a date-based anchor if you gave a date of birth, then 8 fully random characters.",
-     _initials_mix, True),
-]
+KEEP_YOURS = ("Your password, tidied up",
+              "Keeps the word and numbers from your current password, adds symbols and one of your details.",
+              ("core",), _keep_yours)
 
 
-def _strength_label(bits: float) -> str:
-    if bits >= 60:
-        return "Very strong against a targeted attack"
-    if bits >= 45:
-        return "Strong against a targeted attack"
-    return "Moderate against a targeted attack"
-
-
-def _build(name, why, fn, args, tier="strong"):
-    """Retry until the analyzer is happy: no common/sequential/repeated/
-    keyboard-walk patterns and a good score. Strong-tier results must also
-    be free of year/date patterns and score high; easy-tier results (which
-    deliberately contain readable personal fragments) need a decent score."""
-    easy = tier == "easy"
-    min_score = MIN_EASY_SCORE if easy else MIN_ACCEPT_SCORE
-    for _ in range(40):
-        value, bits = fn(*args)
+def _build(title, why, fn, frags):
+    """Retry (new symbols each time) until the analyzer accepts it: no common /
+    sequential / repeated / keyboard-walk pattern and a decent score."""
+    for _ in range(25):
+        value = fn(frags)
         result = analyzer.analyze_password(value)
-        c, pat = result["checks"], result["patterns_detected"]
-        if (result["score"] >= min_score and c["not_common_password"]
+        c = result["checks"]
+        if (result["score"] >= MIN_SCORE and c["not_common_password"]
                 and c["no_sequential_pattern"] and c["no_repeated_pattern"]
-                and c["no_keyboard_walk"] and (easy or not pat["year_or_date"])):
+                and c["no_keyboard_walk"]):
             return {
-                "pattern": name,
-                "tier": tier,
+                "pattern": title,
                 "description": why,
                 "value": value,
-                "random_entropy_bits": round(bits, 1),
-                "targeted_strength": EASY_NOTE if easy else _strength_label(bits),
+                "targeted_strength": HINT,
                 "analysis": result,
             }
     return None
 
 
-def suggest(profile: dict, base_password: str = "") -> dict:
-    """profile: {name, dob, favorites}. base_password: optional existing password."""
+def suggest(profile: dict, base_password: str = "", count: int = DEFAULT_COUNT) -> dict:
+    """profile: {name, dob, favorites}. base_password: optional existing password.
+    Returns up to `count` suggestions (default 2) built only from the user's input."""
     profile = {
         "name": _clean(profile.get("name")),
         "dob": _clean(profile.get("dob"), 20),
         "favorites": _clean(profile.get("favorites"), 256),
     }
     base_password = (base_password or "")[:256]
-    words = _personal_words(profile)
+    count = max(1, min(int(count), MAX_COUNT))
+    frags = _Frags(profile, base_password)
 
     warnings = []
     if base_password:
         low = base_password.lower()
-        leaked = [w for w in words if len(w) >= 3 and w.lower() in low]
+        leaked = [w for w in _tokens(profile["name"], profile["favorites"]) if len(w) >= 3 and w.lower() in low]
         if leaked:
             warnings.append("Your current password contains personal details you entered "
                             "(" + ", ".join(leaked) + ") -- that makes it easy to guess for anyone who knows you.")
@@ -315,41 +179,23 @@ def suggest(profile: dict, base_password: str = "") -> dict:
         if dob and (dob[2] in base_password or dob[0] + dob[1] in base_password):
             warnings.append("Your current password appears to contain your date of birth.")
 
-    easy, strong = [], []
-    if words or profile["dob"]:
-        for name, why, fn in EASY_PATTERNS:
-            built = _build(name, why, fn, (words, profile), tier="easy")
-            if built:
-                easy.append(built)
-    if words:
-        for name, why, fn, _ in STRONG_PATTERNS:
-            built = _build(name, why, fn, (words, profile))
-            if built:
-                strong.append(built)
-    if base_password:
-        built = _build("Your password, kept readable",
-                       "Keeps your current word and adds two random words, a symbol and two digits.",
-                       lambda: _easy_upgrade(base_password), (), tier="easy")
-        if built:
-            easy.insert(0, built)
-        built = _build("Upgrade of your password (extra strong)",
-                       "Keeps the letters of your current password as a recognisable core, then adds random characters around it.",
-                       lambda: _upgrade_base(base_password), ())
-        if built:
-            strong.insert(0, built)
-    suggestions = easy + strong
-    if len(suggestions) < 2:
-        built = _build("Fully random",
-                       "Not enough personal details were usable, so here is a random password with no personal data.",
-                       _fully_random, (words, profile))
-        if built:
-            suggestions.append(built)
+    pool = [p for p in PATTERNS if all(frags.has(n) for n in p[2])]
+    pool = _shuffled(pool)
+    if base_password and frags.has("core"):
+        pool.insert(0, KEEP_YOURS)   # your own password's upgrade comes first
 
-    return {
-        "suggestions": suggestions,
-        "warnings": warnings,
-        "used_details": len(words),
-        "note": ("Easy-to-remember options are built from your own details, so someone who knows you could guess "
-                 "them -- avoid them for important accounts. The extra-strong options get their strength from "
-                 "random characters, scored on that random part alone."),
-    }
+    suggestions, seen = [], set()
+    for title, why, _need, fn in pool:
+        built = _build(title, why, fn, frags)
+        if built and built["value"] not in seen:
+            seen.add(built["value"])
+            suggestions.append(built)
+        if len(suggestions) == count:
+            break
+
+    note = NOTE
+    if not suggestions:
+        note = ("Not enough to build from. Add a favourite thing or your date of birth "
+                "(together with your name) to get suggestions.")
+    return {"suggestions": suggestions, "warnings": warnings, "note": note,
+            "can_refresh": len(pool) > len(suggestions)}

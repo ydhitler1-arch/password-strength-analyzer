@@ -1,73 +1,87 @@
+import re
+
 import pytest
 
 import personalized as p
 
-PROFILE = {"name": "Rahul Sharma", "dob": "14/07/1999", "favorites": "cricket, biryani, Hyderabad"}
+PROFILE = {"name": "Devan", "dob": "13/05/2006", "favorites": "games, anime"}
 
 
-def _tier(out, tier):
-    return [s for s in out["suggestions"] if s["tier"] == tier]
+def _alnum_chunks(value):
+    return [c for c in re.split(r"[^A-Za-z0-9]+", value) if c]
 
 
-def test_returns_easy_and_strong_suggestions():
-    out = p.suggest(PROFILE)
-    assert len(_tier(out, "easy")) >= 3 and len(_tier(out, "strong")) >= 3
-    # easy ones come first
-    tiers = [s["tier"] for s in out["suggestions"]]
-    assert tiers == sorted(tiers, key=lambda t: t != "easy")
-    for s in _tier(out, "strong"):
-        a = s["analysis"]
-        assert a["score"] >= p.MIN_ACCEPT_SCORE
-        assert a["checks"]["not_common_password"]
-        assert not a["patterns_detected"]["year_or_date"]
-        assert s["random_entropy_bits"] > 40
-    for s in _tier(out, "easy"):
-        assert s["analysis"]["score"] >= p.MIN_EASY_SCORE
-        assert s["analysis"]["checks"]["not_common_password"]
+def test_returns_two_by_default_and_respects_count():
+    assert len(p.suggest(PROFILE)["suggestions"]) == 2
+    assert len(p.suggest(PROFILE, count=1)["suggestions"]) == 1
+    assert len(p.suggest(PROFILE, count=99)["suggestions"]) <= p.MAX_COUNT
 
 
-def test_easy_suggestions_are_readable_and_use_the_details():
-    out = p.suggest({"name": "Devan", "dob": "13/05/2006", "favorites": "cricket"})
-    easy = _tier(out, "easy")
-    assert easy
-    for s in easy:
-        low = s["value"].lower()
-        assert "dev" in low or "cricket" in low or "cric" in low
-        assert len(s["value"]) >= 10
-    assert any("13" in s["value"] for s in easy)
-
-
-def test_easy_suggestions_work_with_only_a_name():
-    easy = _tier(p.suggest({"name": "Devan"}), "easy")
-    assert len(easy) >= 3 and all("dev" in s["value"].lower() for s in easy)
-
-
-def test_suggestions_differ():
-    values = [s["value"] for s in p.suggest(PROFILE)["suggestions"]]
-    assert len(set(values)) == len(values)
-
-
-def test_raw_dob_never_embedded():
+def test_suggestions_are_analyzed_and_acceptable():
     for _ in range(30):
-        for s in _tier(p.suggest(PROFILE), "strong"):
-            assert "1999" not in s["value"] and "14/07" not in s["value"]
+        for s in p.suggest(PROFILE)["suggestions"]:
+            a = s["analysis"]
+            assert a["score"] >= p.MIN_SCORE
+            c = a["checks"]
+            assert c["not_common_password"] and c["no_sequential_pattern"]
+            assert c["no_repeated_pattern"] and c["no_keyboard_walk"]
 
 
-def test_upgrade_flow_warns_and_adds_option():
-    out = p.suggest(PROFILE, base_password="rahul1999")
-    assert out["suggestions"][0]["pattern"] == "Your password, kept readable"
-    assert any(s["pattern"].startswith("Upgrade of your password") for s in out["suggestions"])
+def test_only_users_words_and_numbers_are_used():
+    """Every alphanumeric chunk must be built from the user's own fragments."""
+    allowed_text = "devan games anime"
+    for _ in range(100):
+        for s in p.suggest(PROFILE, count=4)["suggestions"]:
+            for chunk in _alnum_chunks(s["value"]):
+                for part in re.findall(r"[A-Za-z]+|\d+", chunk):
+                    if part.isdigit():
+                        # only combinations of day 13, month 05, year 2006 / yy 06
+                        assert re.fullmatch(r"(2006|13|05|06)+", part), (s["value"], part)
+                    else:
+                        assert part.lower() in allowed_text, (s["value"], part)
+
+
+def test_no_random_words_when_a_field_is_missing():
+    out = p.suggest({"name": "Devan", "favorites": "cricket"}, count=4)
+    for s in out["suggestions"]:
+        for part in re.findall(r"[A-Za-z]+", s["value"]):
+            assert part.lower() in ("devan", "cricket", "dev"), s["value"]
+        assert not re.search(r"\d", s["value"])
+
+
+def test_suggestions_differ_and_refresh_changes_them():
+    out = p.suggest(PROFILE, count=4)
+    values = [s["value"] for s in out["suggestions"]]
+    assert len(set(values)) == len(values)
+    seen = {s["value"] for _ in range(20) for s in p.suggest(PROFILE)["suggestions"]}
+    assert len(seen) > 4
+
+
+def test_not_enough_input_gives_message_not_random_password():
+    out = p.suggest({"name": "Devan"})
+    assert out["suggestions"] == [] and "Add a favourite" in out["note"]
+
+
+def test_keep_yours_flow_uses_own_password_and_warns():
+    out = p.suggest({"name": "Rahul", "dob": "14/07/1999", "favorites": "cricket"}, base_password="rahul1999")
+    first = out["suggestions"][0]
+    assert first["pattern"] == "Your password, tidied up"
+    assert first["value"].lower().startswith("rahul")
+    assert first["analysis"]["score"] >= p.MIN_SCORE
     assert len(out["warnings"]) == 2
 
 
-def test_upgrade_without_details():
+def test_keep_yours_with_only_a_password():
     out = p.suggest({}, base_password="sunshine")
-    assert any(s["pattern"].startswith("Upgrade of your password") for s in out["suggestions"])
+    assert out["suggestions"] and out["suggestions"][0]["value"].lower().startswith("sunshine")
 
 
-def test_too_few_details_falls_back_to_random():
-    out = p.suggest({"name": "X"})
-    assert [s["pattern"] for s in out["suggestions"]] == ["Fully random"]
+def test_digits_with_triple_repeats_are_sliced_not_dropped():
+    # "1999" has 999 -> analyzer rejects it whole, so a slice must be used
+    for _ in range(20):
+        out = p.suggest({}, base_password="rahul1999")
+        assert out["suggestions"]
+        assert "1999" not in out["suggestions"][0]["value"]
 
 
 def test_dob_parsing():

@@ -453,9 +453,7 @@
   .pers-value { font-family: var(--font-mono); font-size: 1.02rem; word-break: break-all; margin-bottom: 10px; }
   .pers-meta { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; font-size: 0.82rem; color: var(--text-muted); }
   .pers-meta strong { color: var(--text); }
-  .pers-group { margin: 6px 0 -2px; font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); font-family: var(--font-mono); }
   .pers-easy-note { color: #e5a23c; }
-  .pers-strong-group > summary { cursor: pointer; font-size: 0.88rem; color: var(--text); padding: 8px 0 12px; }
   .pers-note { color: var(--text-muted); font-size: 0.82rem; margin: 12px 0 0; }
 
   .hibp-result {
@@ -549,7 +547,7 @@
     <div class="pers-banner" id="persBanner" hidden>
       Your current password is weak. Tell us a little about yourself and we'll suggest stronger ones built from it.
     </div>
-    <p class="muted">Give a few details and get password ideas built from them &mdash; easy-to-remember ones first, plus extra-strong ones. Pick one to run it through the analyzer. Easy ones are quick to remember but easier to guess if someone knows you, so use them for low-risk accounts.</p>
+    <p class="muted">Give a few details and get two password ideas built only from the words and numbers you enter, joined with symbols. Pick one to run it through the analyzer. They're easy to remember but easier to guess if someone knows you, so use them for low-risk accounts.</p>
     <div class="pers-form">
       <label>Name <input type="text" id="persName" maxlength="64" autocomplete="off" placeholder="e.g. Rahul Sharma" /></label>
       <label>Date of birth <input type="text" id="persDob" maxlength="10" inputmode="numeric" autocomplete="off" placeholder="DD/MM/YYYY" /></label>
@@ -1261,19 +1259,14 @@
       li.textContent = w;
       persWarnings.appendChild(li);
     });
-    const easyBox = document.createElement("div");
-    const strongBox = document.createElement("div");
-    easyBox.className = strongBox.className = "pers-results";
     (data.suggestions || []).forEach(sug => {
-      const isEasy = sug.tier === "easy";
       const card = document.createElement("div");
       card.className = "pers-card";
       card.innerHTML =
         "<h3>" + esc(sug.pattern) + "</h3><p>" + esc(sug.description) + "</p>" +
         '<div class="pers-value">' + esc(sug.value) + "</div>" +
         '<div class="pers-meta"><span>Score <strong>' + sug.analysis.score + "/100</strong> (" + esc(sug.analysis.label) + ")</span>" +
-        (isEasy ? "" : "<span>Random entropy <strong>" + sug.random_entropy_bits + " bits</strong></span>") +
-        '<span class="' + (isEasy ? "pers-easy-note" : "") + '">' + esc(sug.targeted_strength) + "</span></div>";
+        '<span class="pers-easy-note">' + esc(sug.targeted_strength) + "</span></div>";
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "secondary-btn";
@@ -1292,26 +1285,8 @@
       copy.addEventListener("click", () => copyText(sug.value, copy, "Copy"));
       card.appendChild(btn);
       card.appendChild(copy);
-      (isEasy ? easyBox : strongBox).appendChild(card);
+      persResults.appendChild(card);
     });
-
-    if (easyBox.children.length) {
-      const h = document.createElement("h3");
-      h.className = "pers-group";
-      h.textContent = "Easy to remember";
-      persResults.appendChild(h);
-      persResults.appendChild(easyBox);
-    }
-    if (strongBox.children.length) {
-      const det = document.createElement("details");
-      det.className = "pers-strong-group";
-      det.open = !easyBox.children.length;
-      const sum = document.createElement("summary");
-      sum.textContent = "Extra strong (harder to remember, safest if someone knows your details)";
-      det.appendChild(sum);
-      det.appendChild(strongBox);
-      persResults.appendChild(det);
-    }
     persNote.hidden = !data.note;
     persNote.textContent = data.note || "";
   }
@@ -1332,6 +1307,7 @@
       dob: document.getElementById("persDob").value,
       favorites: document.getElementById("persFavs").value,
     };
+    body.count = 2;
     if (persUseCurrent.checked && pwInput.value) body.base_password = pwInput.value;
     persBtn.disabled = true;
     persStatus.textContent = "Building suggestions…";
@@ -1342,9 +1318,10 @@
       const data = await res.json();
       if (!res.ok) { persStatus.textContent = data.error || "Something went wrong."; return; }
       renderSuggestions(data);
+      persBtn.textContent = data.suggestions.length ? "Show 2 different ones" : "Suggest passwords";
       persStatus.textContent = data.suggestions.length
-        ? "Pick one and press “Analyze this one” to see its full breakdown."
-        : "Couldn't build suggestions — try adding more details.";
+        ? "Pick one and press “Analyze this one”, or ask for 2 different ones."
+        : "Not enough to build from — add a favourite thing or your date of birth.";
     } catch (e) {
       persStatus.textContent = "Couldn't reach the server — this feature needs the Flask app running.";
     } finally {
