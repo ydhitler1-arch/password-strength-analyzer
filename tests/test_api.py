@@ -32,6 +32,7 @@ def test_wordlist(client):
 def test_personalize(client):
     r = client.post("/api/personalize", json={"name": "Asha Rao", "favorites": "tennis, mango"})
     assert r.status_code == 200 and len(r.get_json()["suggestions"]) >= 3
+    assert {s["tier"] for s in r.get_json()["suggestions"]} == {"easy", "strong"}
 
 
 def test_personalize_requires_input(client):
